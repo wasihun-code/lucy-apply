@@ -59,6 +59,20 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             return qs
         return qs.none()
 
+    def create(self, request, *args, **kwargs):
+        program_id = request.data.get('program')
+        cycle_id = request.data.get('admission_cycle')
+        existing = Application.objects.filter(
+            applicant=request.user.applicant,
+            program_id=program_id,
+            admission_cycle_id=cycle_id,
+            status='draft',
+        ).first()
+        if existing:
+            serializer = self.get_serializer(existing)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return super().create(request, *args, **kwargs)
+
     def perform_destroy(self, instance):
         if instance.status != 'draft':
             raise ValidationError('Only draft applications can be deleted')

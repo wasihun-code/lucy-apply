@@ -58,7 +58,7 @@ class ApplicationStatusHistory(TimestampedUUIDModel):
     from_status = models.CharField(max_length=50, null=True, blank=True)
     to_status = models.CharField(max_length=50)
     changed_by_type = models.CharField(max_length=50, choices=CHANGED_BY_CHOICES)
-    changed_by_id = models.UUIDField(null=True, blank=True)
+    changed_by_id = models.CharField(max_length=50, null=True, blank=True)
     reason = models.TextField(blank=True)
 
     class Meta:

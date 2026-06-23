@@ -12,7 +12,7 @@ class TestCreateDraftApplication:
         }, format='json')
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data['status'] == 'draft'
-        assert response.data['program'] == str(program.id)
+        assert str(response.data['program']) == str(program.id)
 
     def test_unverified_applicant_gets_403(self, unverified_auth_client, program, admission_cycle):
         response = unverified_auth_client.post('/api/v1/applications/', {

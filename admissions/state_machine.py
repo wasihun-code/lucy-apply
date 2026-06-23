@@ -46,6 +46,6 @@ def transition_application(application, new_status, actor_type, actor_id, reason
         from_status=from_status,
         to_status=new_status,
         changed_by_type=actor_type,
-        changed_by_id=actor_id,
+        changed_by_id=str(actor_id) if actor_id else None,
         reason=reason,
     )
