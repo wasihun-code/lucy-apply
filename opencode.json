@@ -11,7 +11,7 @@
   "agent": {
     "build": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "opencode/big-pickle",
       "temperature": 0.2,
       "description": "Full build agent — writes models, views, serializers, tests. Use for implementation sprints.",
       "permission": {
@@ -21,7 +21,7 @@
     },
     "plan": {
       "mode": "primary",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "opencode/deepseek-v4-flash-free",
       "temperature": 0.1,
       "description": "Read-only planning agent. Use this FIRST on every sprint to review the plan before building.",
       "permission": {
@@ -31,7 +31,7 @@
     },
     "review": {
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "opencode/mimo-v2.5-free",
       "temperature": 0.1,
       "description": "Code review agent — checks for tenant-scoping errors, permission gaps, and state machine violations. Invoke with @review.",
       "permission": {
@@ -41,7 +41,7 @@
     },
     "security-check": {
       "mode": "subagent",
-      "model": "anthropic/claude-sonnet-4-20250514",
+      "model": "opencode/nemotron-3-ultra-free",
       "temperature": 0.0,
       "description": "Security-focused review agent. Checks for cross-tenant leaks, webhook signature bypass, payment fee tampering, and JWT misuse. Invoke with @security-check before any auth/payment/document PR.",
       "permission": {

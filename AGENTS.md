@@ -1,150 +1,93 @@
 # Lucy Apply — Agent Standing Brief
 
-You are building **Lucy Apply**, an international student admissions platform for Ethiopian universities. Every session starts here. Read this fully before doing anything.
+**No implementation code exists yet.** This repo is pure scaffolding: context docs, opencode config, sprint commands. Sprint 1 builds the Django project from scratch. PLAYBOOK.md documents the human's end-to-end workflow — read it once.
 
----
+## How to work
 
-## What This Project Is
+- `/sprintN` (N=1..11) loads sprint scope from `.opencode/commands/`.
+- Always **Plan mode first** (read-only, `opencode.json` plan agent), then **Build mode**.
+- Run `@review` after each sprint (tenant-scoping, permissions, state machine).
+- Run `@security-check` before payment/auth/document PRs.
+- Context files in `/context/` are the authoritative spec for each area — read before touching that code.
 
-A multi-tenant web platform serving two sides:
-- **Applicants** (international students, anywhere in the world) who discover Ethiopian universities, apply to programs, upload documents, pay fees, and track status.
-- **Universities** (2–3 Ethiopian partner institutions for MVP) whose staff manage programs, review applications, and issue decisions.
+## Locked stack
 
-The long-term vision is to become Ethiopia's national higher-education admissions infrastructure. The immediate goal is a demoable MVP.
-
----
-
-## Locked Technical Stack — Do NOT deviate from this
-
-| Layer | Technology |
+| Layer | Choice |
 |---|---|
 | Backend | Django 5.x + Django REST Framework |
 | Frontend | Next.js 14+ (App Router) |
 | Database | PostgreSQL 15+ via Django ORM |
 | Background jobs | Celery + Redis (Cloud Memorystore) |
-| Object storage | Google Cloud Storage via django-storages |
-| Auth | djangorestframework-simplejwt + django-otp (MFA) |
-| Hosting | Google Cloud Run |
-| DB hosting | Cloud SQL (PostgreSQL) |
+| Object storage | GCS via django-storages |
+| Auth | simplejwt + django-otp (MFA) |
+| Hosting | Cloud Run + Cloud SQL |
 | CI/CD | GitHub Actions |
-| Tenant isolation | Shared DB + university_id + Postgres row-level security |
+| Tenant isolation | Shared DB + university_id + RLS |
 
-Do not suggest alternative frameworks, ORMs, or hosting options. These are locked decisions.
+Do not suggest alternatives. These are locked.
 
----
-
-## Django App Structure — Every model goes in its correct app
+## Django apps
 
 ```
-lucy_apply/          ← Django project root
-  identity/          ← User models (Applicant, UniversityStaff, PlatformAdmin, MFADevice)
-  universities/      ← University model
-  programs/          ← Program, AdmissionCycle models
-  admissions/        ← Application, ApplicationStatusHistory models
-  documents/         ← ApplicationDocument model
-  payments/          ← Payment model
-  notifications/     ← Celery tasks only, no persistent models for MVP
-  audit/             ← AuditLogEntry model
+lucy_apply/
+  identity/       ← User models (Applicant, UniversityStaff, PlatformAdmin)
+  universities/   ← University model
+  programs/       ← Program, AdmissionCycle
+  admissions/     ← Application, ApplicationStatusHistory
+  documents/      ← ApplicationDocument
+  payments/       ← Payment model
+  notifications/  ← Celery tasks only (no persistent models for MVP)
+  audit/          ← AuditLogEntry
 ```
 
----
+## Multi-tenancy (non-negotiable)
 
-## Multi-Tenancy Rules — These are non-negotiable
+1. Tenant-scoped models use `TenantScopedModel` abstract base (adds `university` FK) — never add manually.
+2. `TenantManager` is the **default** manager — auto-filters by `request.user.university_id`.
+3. `IsScopedToUniversity` permission class on every UniversityStaff ViewSet.
+4. RLS policies via `RunSQL` migrations as third layer. Platform Admin bypasses via separate DB role.
+5. **Cross-tenant data leaks are the #1 severity bug.** When in doubt, add the scope check.
 
-1. Every tenant-scoped model carries a `university` FK (ForeignKey to `universities.University`).
-2. A `TenantScopedModel` abstract base class provides this FK consistently — never add it manually per model.
-3. A custom `TenantManager` auto-filters by `request.user.university_id` — it must be the **default** manager on every tenant-scoped model.
-4. A `IsScopedToUniversity` DRF permission class is applied via `permission_classes` on every ViewSet serving University Staff.
-5. Postgres row-level security policies are the **third** layer — applied via `RunSQL` in migrations.
-6. Platform Admin connections bypass RLS via a separate DB role.
-7. **Cross-tenant data leaks are the single highest-severity bug class in this codebase.** When in doubt, add the scope check, don't skip it.
+## Role model
 
----
+Four mutually-exclusive roles: `Applicant` (global, own data), `UniversityStaff Officer/Admin` (tenant-scoped), `PlatformAdmin` (cross-tenant). MFA required for staff and admin.
 
-## Role Model
+## Application state machine
 
-Four roles, mutually exclusive per account (ADR-004):
+```
+draft → submitted → under_review → admitted → accepted
+                                    → rejected
+                                    → waitlisted
+admitted/rejected/waitlisted → under_review (reversal, before applicant responds)
+admitted → declined
+```
 
-| Role | Scope |
+Immutable: `accepted` and `declined`. All transitions go through `transition_application()` in `admissions/state_machine.py` — never write `application.status = x` directly. Decisioning precondition: all required docs must be `verified`.
+
+## API conventions
+
+- Base path: `/api/v1/`, DRF ViewSets + DefaultRouter, `@action` for non-CRUD actions.
+- Pagination: `PageNumberPagination`, `page_size=20`, max 100.
+- Filtering: `django-filter` `DjangoFilterBackend`.
+- Errors: custom handler → `{"error": {"code": "...", "message": "..."}}`.
+- `/payments/webhook/`: `@csrf_exempt` + signature verification **only** — never JWT auth.
+- Fee amount from `program.fee_amount` (server-side) — never from request body.
+
+## Audit & lifecycle
+
+- AuditLogEntry via Django signals, not inline in views.
+- Never hard-delete: Submitted applications, payments, documents (versioned), audit logs.
+- Users/staff: soft-delete via `account_status='deactivated'`.
+- Each application pays exactly one fee (`Payment.application` is `OneToOneField`).
+- Deadline check at `payment.initiated_at`, not `completed_at` (ADR-009).
+
+## Context files (read before writing that area)
+
+| File | When |
 |---|---|
-| `Applicant` | Global — own data only |
-| `UniversityStaff` (Officer) | Tenant-scoped — `permission_level='officer'` |
-| `UniversityStaff` (Admin) | Tenant-scoped — `permission_level='admin'` |
-| `PlatformAdmin` | Cross-tenant |
-
-MFA (django-otp TOTP) is **required** for UniversityStaff and PlatformAdmin. Never skip this check on protected views.
-
----
-
-## Application Status State Machine
-
-Valid transitions only — enforce at the model/service level, not just the API:
-
-```
-DRAFT → SUBMITTED → UNDER_REVIEW → ADMITTED → ACCEPTED
-                               → REJECTED
-                               → WAITLISTED
-ADMITTED/REJECTED/WAITLISTED → UNDER_REVIEW  (reversal, only before ACCEPTED/DECLINED)
-ADMITTED → DECLINED
-```
-
-Invalid: any transition out of ACCEPTED or DECLINED. These are immutable once set.
-
----
-
-## API Conventions
-
-- Base path: `/api/v1/`
-- DRF ViewSets + DefaultRouter for all resources
-- `@action` decorator for non-CRUD operations (submit, verify, flag, offer-response, etc.)
-- Pagination: `PageNumberPagination`, `page_size=20`, max 100
-- Filtering: `django-filter` `DjangoFilterBackend`
-- Errors: custom exception handler normalizing to `{"error": {"code": "...", "message": "..."}}`
-- Webhook endpoint (`/payments/webhook/`): `@csrf_exempt` + signature verification — **never** add JWT auth to this endpoint
-
----
-
-## Payment Rules
-
-- Application fee is **non-refundable** (ADR-002).
-- Each application pays exactly one fee — `Payment.application` is a `OneToOneField`.
-- Fee amount comes from `program.fee_amount` on the server — **never trust a client-supplied fee amount**.
-- Deadline check: evaluated at `payment.initiated_at`, not `payment.completed_at` (ADR-009).
-- Webhook signature must be verified before processing any payment confirmation.
-
----
-
-## Audit & Soft Delete
-
-- Applications: never hard-delete once Submitted.
-- Payments: never delete — financial record.
-- ApplicationDocument: never delete — versions retained (FR-22), old versions kept not soft-deleted.
-- AuditLogEntry: never delete — defeats its own purpose.
-- Users/Staff: soft-delete via `account_status='deactivated'`, never hard-delete.
-- Use Django signals to write AuditLogEntry records on status changes — don't put audit writes inside view/viewset logic.
-
----
-
-## Context Files (always read these before writing code in a given area)
-
-These files live in `/context/` and contain the authoritative specifications:
-
-| File | When to read it |
-|---|---|
-| `context/ARCHITECTURE.md` | Before any structural decision |
-| `context/DATABASE_SCHEMA.md` | Before writing any model |
-| `context/API_ROUTES.md` | Before writing any ViewSet or endpoint |
-| `context/PERMISSIONS.md` | Before writing any permission class or check |
-| `context/STATE_MACHINES.md` | Before writing any status transition logic |
-| `context/SECURITY.md` | Before any auth, payment, or document handling code |
-
----
-
-## How to Behave as a Coding Agent
-
-1. **Plan before building.** Use Plan mode to lay out your approach first, especially for any cross-app change. Only switch to Build mode once the plan is confirmed.
-2. **One sprint card at a time.** Don't attempt work from multiple sprints in one session. The sprint card defines the full scope.
-3. **Read the context file before writing the model.** Do not rely on memory — read `context/DATABASE_SCHEMA.md` every time you're about to write a model.
-4. **Run tests after each significant change.** `pytest` for Django; `next build` for the frontend after structural changes.
-5. **Never modify a locked decision.** If you think a locked decision needs revisiting, stop and flag it as a comment — don't quietly work around it.
-6. **The `TenantManager` filters automatically — don't add manual `WHERE university_id = ?` in ViewSet `get_queryset` if the manager already handles it.** But verify the manager is actually the default manager first.
+| `context/ARCHITECTURE.md` | Structural decisions |
+| `context/DATABASE_SCHEMA.md` | Any model definition |
+| `context/API_ROUTES.md` | ViewSet or endpoint |
+| `context/PERMISSIONS.md` | Permission classes |
+| `context/STATE_MACHINES.md` | Status transitions |
+| `context/SECURITY.md` | Auth/payment/document code |
