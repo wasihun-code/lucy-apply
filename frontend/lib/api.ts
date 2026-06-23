@@ -1,5 +1,5 @@
 const API_URL = typeof window === 'undefined'
-  ? process.env.API_URL || 'http://backend:8000/api/v1/'
+  ? process.env.API_URL || 'http://localhost:8000/api/v1/'
   : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
 
 export async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
@@ -52,4 +52,41 @@ export interface AdmissionCycle {
   open_date: string
   close_date: string
   status: string
+}
+
+export interface DocumentChecklistItem {
+  type: string
+  label: string
+  status: string | null
+  uploaded: boolean
+}
+
+export interface Application {
+  id: string
+  program: string
+  program_name: string
+  university_name: string
+  admission_cycle: string
+  status: string
+  form_data: Record<string, unknown>
+  document_checklist: DocumentChecklistItem[]
+  created_at: string
+  updated_at: string
+}
+
+export interface ApplicationDocument {
+  id: string
+  document_type: string
+  file: string | null
+  object_key: string
+  status: string
+  flagged_reason: string | null
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+export interface UploadUrlResponse {
+  upload_url: string | null
+  object_key: string
 }

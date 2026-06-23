@@ -3,7 +3,10 @@ import logging
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
-from rest_framework import status
+from django.conf import settings
+
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -11,8 +14,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import Applicant, EmailVerificationToken, PasswordResetToken
-from .permissions import IsUniversityStaff, IsPlatformAdmin
-from .serializers import RegisterSerializer
+from .permissions import IsUniversityStaff, IsPlatformAdmin, IsApplicant
+from .serializers import RegisterSerializer, ApplicantSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -24,8 +27,12 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         applicant = serializer.save()
-        token = EmailVerificationToken.objects.create(applicant=applicant)
-        logger.info(f'Verification email for {applicant.email}: {token.token}')
+        if settings.DEBUG:
+            applicant.email_verified = True
+            applicant.save(update_fields=['email_verified'])
+        else:
+            token = EmailVerificationToken.objects.create(applicant=applicant)
+            logger.info(f'Verification email for {applicant.email}: {token.token}')
         return Response(
             {
                 'id': str(applicant.id),
@@ -162,3 +169,13 @@ class MFAVerifyView(APIView):
             {'error': {'code': '400', 'message': 'Invalid MFA code'}},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+class ApplicantViewSet(viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated, IsApplicant]
+    serializer_class = ApplicantSerializer
+
+    @action(detail=False, methods=['get'])
+    def me(self, request):
+        serializer = self.get_serializer(request.user.applicant)
+        return Response(serializer.data)

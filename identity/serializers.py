@@ -19,3 +19,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         applicant.set_password(password)
         applicant.save()
         return applicant
+
+
+class ApplicantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Applicant
+        fields = [
+            'id', 'email', 'full_name', 'country_of_residence',
+            'date_of_birth', 'nationality', 'email_verified',
+        ]
+        read_only_fields = ['id', 'email', 'email_verified']

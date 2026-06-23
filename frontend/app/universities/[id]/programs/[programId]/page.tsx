@@ -55,11 +55,40 @@ export default async function ProgramDetailPage({
       {program.open_cycles.length > 0 && (
         <section style={{ marginTop: '2rem' }}>
           <h2>Open Admission Cycles</h2>
-          <div className="card-grid">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.75rem' }}>
             {program.open_cycles.map((cycle: AdmissionCycle) => (
-              <div key={cycle.id} className="card">
-                <h3>{cycle.name}</h3>
-                <p>Status: {cycle.status}</p>
+              <div
+                key={cycle.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '0.75rem 1rem',
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                }}
+              >
+                <div>
+                  <strong>{cycle.name}</strong>
+                  <br />
+                  <span style={{ fontSize: '0.8rem', color: '#666' }}>
+                    {new Date(cycle.open_date).toLocaleDateString()} &ndash;{' '}
+                    {new Date(cycle.close_date).toLocaleDateString()}
+                  </span>
+                </div>
+                <Link
+                  href={`/dashboard/apply/${params.programId}/?cycle=${cycle.id}`}
+                  style={{
+                    padding: '0.4rem 0.8rem',
+                    background: '#198754',
+                    color: '#fff',
+                    borderRadius: '4px',
+                    fontSize: '0.85rem',
+                    textDecoration: 'none',
+                  }}
+                >
+                  Apply Now
+                </Link>
               </div>
             ))}
           </div>
