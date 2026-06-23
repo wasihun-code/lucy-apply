@@ -1,0 +1,11 @@
+venv/
+.git/
+.opencode/
+__pycache__/
+*.pyc
+.pytest_cache/
+db.sqlite3
+.env
+context/
+.DS_Store
+*.md

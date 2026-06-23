@@ -1,0 +1,7 @@
+FROM node:20-slim
+
+WORKDIR /app
+
+EXPOSE 3000
+
+CMD ["node", "-e", "require('http').createServer((req, res) => { res.writeHead(200, {'Content-Type': 'text/html'}); res.end('<html><body><h1>Lucy Apply - Frontend Coming Soon</h1></body></html>'); }).listen(3000);"]
