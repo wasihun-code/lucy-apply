@@ -1,0 +1,53 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "context/ARCHITECTURE.md",
+    "context/DATABASE_SCHEMA.md",
+    "context/API_ROUTES.md",
+    "context/PERMISSIONS.md",
+    "context/STATE_MACHINES.md",
+    "context/SECURITY.md"
+  ],
+  "agent": {
+    "build": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "temperature": 0.2,
+      "description": "Full build agent — writes models, views, serializers, tests. Use for implementation sprints.",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "plan": {
+      "mode": "primary",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "temperature": 0.1,
+      "description": "Read-only planning agent. Use this FIRST on every sprint to review the plan before building.",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "review": {
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "temperature": 0.1,
+      "description": "Code review agent — checks for tenant-scoping errors, permission gaps, and state machine violations. Invoke with @review.",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "security-check": {
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-20250514",
+      "temperature": 0.0,
+      "description": "Security-focused review agent. Checks for cross-tenant leaks, webhook signature bypass, payment fee tampering, and JWT misuse. Invoke with @security-check before any auth/payment/document PR.",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    }
+  }
+}
