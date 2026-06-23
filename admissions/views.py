@@ -1,3 +1,163 @@
-from django.shortcuts import render
+import uuid
 
-# Create your views here.
+from django.shortcuts import get_object_or_404
+from django.core.exceptions import ValidationError
+
+from rest_framework import viewsets, status, permissions
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser
+
+from .models import Application, ApplicationStatusHistory
+from .serializers import (
+    ApplicationCreateSerializer,
+    ApplicationListSerializer,
+    ApplicationDetailSerializer,
+    ApplicationUpdateSerializer,
+)
+from documents.models import ApplicationDocument
+from documents.serializers import ApplicationDocumentSerializer
+from identity.permissions import (
+    IsApplicant, IsEmailVerified, IsUniversityStaff,
+    IsScopedToUniversity, IsApplicantOwner,
+)
+
+
+class ApplicationViewSet(viewsets.ModelViewSet):
+    queryset = Application.objects.all()
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ApplicationCreateSerializer
+        elif self.action in ('partial_update', 'update'):
+            return ApplicationUpdateSerializer
+        elif self.action == 'list':
+            return ApplicationListSerializer
+        return ApplicationDetailSerializer
+
+    def get_permissions(self):
+        if self.action in ('create', 'partial_update', 'update', 'destroy'):
+            permission_classes = [
+                permissions.IsAuthenticated, IsApplicant, IsEmailVerified,
+            ]
+            if self.action in ('partial_update', 'update', 'destroy'):
+                permission_classes.append(IsApplicantOwner)
+        elif self.action == 'retrieve':
+            permission_classes = [permissions.IsAuthenticated]
+        elif self.action == 'list':
+            permission_classes = [permissions.IsAuthenticated, IsApplicant]
+        else:
+            permission_classes = [permissions.IsAuthenticated, IsApplicant, IsEmailVerified]
+        return [p() for p in permission_classes]
+
+    def get_queryset(self):
+        qs = Application.objects.all()
+        user = self.request.user
+        if hasattr(user, 'applicant'):
+            return qs.filter(applicant=user.applicant)
+        if hasattr(user, 'universitystaff'):
+            return qs
+        return qs.none()
+
+    def perform_destroy(self, instance):
+        if instance.status != 'draft':
+            raise ValidationError('Only draft applications can be deleted')
+        instance.delete()
+
+    @action(detail=True, methods=['get', 'post'])
+    def documents(self, request, pk=None):
+        application = self.get_object()
+
+        if request.method == 'GET':
+            docs = application.documents.all().order_by('-version')
+            serializer = ApplicationDocumentSerializer(docs, many=True)
+            return Response(serializer.data)
+
+        document_type = request.data.get('document_type')
+        if not document_type:
+            return Response(
+                {'error': {'code': '400', 'message': 'document_type is required'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        required_types = [
+            d.get('type') for d in application.program.required_documents
+        ]
+        if document_type not in required_types:
+            return Response(
+                {'error': {'code': '400', 'message': f'Invalid document_type. Must be one of: {", ".join(required_types)}'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing = application.documents.filter(
+            document_type=document_type
+        ).order_by('-version').first()
+        next_version = (existing.version + 1) if existing else 1
+
+        doc = ApplicationDocument(
+            application=application,
+            document_type=document_type,
+            version=next_version,
+        )
+
+        uploaded_file = request.FILES.get('file')
+        object_key = request.data.get('object_key', '')
+
+        if uploaded_file:
+            doc.file = uploaded_file
+        elif object_key:
+            doc.object_key = object_key
+        else:
+            return Response(
+                {'error': {'code': '400', 'message': 'Either file or object_key is required'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        doc.save()
+        serializer = ApplicationDocumentSerializer(doc)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='documents/upload-url')
+    def documents_upload_url(self, request, pk=None):
+        application = self.get_object()
+        document_type = request.data.get('document_type')
+
+        if not document_type:
+            return Response(
+                {'error': {'code': '400', 'message': 'document_type is required'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        required_types = [
+            d.get('type') for d in application.program.required_documents
+        ]
+        if document_type not in required_types:
+            return Response(
+                {'error': {'code': '400', 'message': f'Invalid document_type. Must be one of: {", ".join(required_types)}'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        object_key = f"documents/{application.id}/{document_type}/{uuid.uuid4()}"
+
+        return Response({
+            'upload_url': None,
+            'object_key': object_key,
+        })
+
+    @action(detail=True, methods=['get'], url_path='history')
+    def history(self, request, pk=None):
+        application = self.get_object()
+        history_qs = ApplicationStatusHistory.objects.filter(
+            application=application
+        ).order_by('-created_at')
+        data = [
+            {
+                'from_status': h.from_status,
+                'to_status': h.to_status,
+                'changed_by_type': h.changed_by_type,
+                'reason': h.reason,
+                'created_at': h.created_at,
+            }
+            for h in history_qs
+        ]
+        return Response(data)

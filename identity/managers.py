@@ -18,4 +18,15 @@ class UserManager(BaseUserManager):
 
 class TenantManager(models.Manager):
     def get_queryset(self):
+        from identity.threadlocal import get_current_request
+
+        request = get_current_request()
+        if (
+            request
+            and request.user.is_authenticated
+            and hasattr(request.user, 'universitystaff')
+        ):
+            return super().get_queryset().filter(
+                university_id=request.user.universitystaff.university_id
+            )
         return super().get_queryset()

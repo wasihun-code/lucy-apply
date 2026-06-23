@@ -51,7 +51,30 @@ class IsEmailVerified(BasePermission):
 
 class IsScopedToUniversity(BasePermission):
     def has_permission(self, request, view):
+        if not (
+            request.user
+            and request.user.is_authenticated
+            and hasattr(request.user, 'universitystaff')
+        ):
+            return False
         return True
+
+    def has_object_permission(self, request, view, obj):
+        if not hasattr(obj, 'university'):
+            return True
+        return obj.university_id == request.user.universitystaff.university_id
+
+
+class IsApplicantOwner(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and hasattr(request.user, 'applicant')
+        )
+
+    def has_object_permission(self, request, view, obj):
+        return obj.applicant_id == request.user.applicant.id
 
 
 class MFAVerified(BasePermission):
