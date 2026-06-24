@@ -4,6 +4,7 @@ from django.utils import timezone
 
 from admissions.models import Application, ApplicationStatusHistory
 from admissions.state_machine import transition_application, VALID_TRANSITIONS
+from documents.models import ApplicationDocument
 
 
 @pytest.mark.django_db
@@ -23,7 +24,7 @@ class TestValidTransitions:
         application.refresh_from_db()
         assert application.status == 'under_review'
 
-    def test_under_review_to_admitted(self, application):
+    def test_under_review_to_admitted(self, application, verified_documents):
         application.status = 'under_review'
         application.save()
         transition_application(application, 'admitted', 'university_staff', '00000000-0000-0000-0000-000000000001')
@@ -31,14 +32,14 @@ class TestValidTransitions:
         assert application.status == 'admitted'
         assert application.decision_at is not None
 
-    def test_under_review_to_rejected(self, application):
+    def test_under_review_to_rejected(self, application, verified_documents):
         application.status = 'under_review'
         application.save()
         transition_application(application, 'rejected', 'university_staff', '00000000-0000-0000-0000-000000000001')
         application.refresh_from_db()
         assert application.status == 'rejected'
 
-    def test_under_review_to_waitlisted(self, application):
+    def test_under_review_to_waitlisted(self, application, verified_documents):
         application.status = 'under_review'
         application.save()
         transition_application(application, 'waitlisted', 'university_staff', '00000000-0000-0000-0000-000000000001')
@@ -109,6 +110,34 @@ class TestInvalidTransitions:
         application.save()
         with pytest.raises(ValidationError):
             transition_application(application, 'draft', 'applicant', str(application.applicant.id))
+
+    def test_decision_fails_without_verified_documents(self, application):
+        application.status = 'under_review'
+        application.save()
+        with pytest.raises(ValidationError, match='required documents not verified'):
+            transition_application(application, 'admitted', 'university_staff', '00000000-0000-0000-0000-000000000001')
+
+    def test_decision_fails_with_flagged_documents(self, application):
+        application.status = 'under_review'
+        application.save()
+        ApplicationDocument.objects.create(
+            application=application,
+            document_type='transcript',
+            university=application.university,
+            status='flagged',
+            flagged_reason='Illegible',
+            version=1,
+        )
+        ApplicationDocument.objects.create(
+            application=application,
+            document_type='id_document',
+            university=application.university,
+            status='flagged',
+            flagged_reason='Expired',
+            version=1,
+        )
+        with pytest.raises(ValidationError, match='required documents not verified'):
+            transition_application(application, 'admitted', 'university_staff', '00000000-0000-0000-0000-000000000001')
 
 
 @pytest.mark.django_db

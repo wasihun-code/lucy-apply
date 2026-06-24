@@ -8,6 +8,7 @@ from identity.models import Applicant
 from universities.models import University
 from programs.models import Program, AdmissionCycle
 from admissions.models import Application
+from documents.models import ApplicationDocument
 
 
 @pytest.fixture
@@ -89,6 +90,18 @@ def application(applicant_user, program, admission_cycle):
         university=program.university,
         form_data={'full_name': 'Test Applicant', 'phone': '+251911111111'},
     )
+
+
+@pytest.fixture
+def verified_documents(application):
+    for req in application.program.required_documents:
+        ApplicationDocument.objects.create(
+            application=application,
+            document_type=req['type'],
+            university=application.university,
+            status='verified',
+            version=1,
+        )
 
 
 def get_token_for_user(user):

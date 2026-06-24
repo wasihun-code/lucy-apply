@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 
 from .models import Application, ApplicationStatusHistory
+from .state_machine import transition_application
 from .serializers import (
     ApplicationCreateSerializer,
     ApplicationListSerializer,
@@ -20,6 +21,7 @@ from documents.serializers import ApplicationDocumentSerializer
 from identity.permissions import (
     IsApplicant, IsEmailVerified, IsUniversityStaff,
     IsScopedToUniversity, IsApplicantOwner,
+    IsApplicantOwnerOrStaffScoped,
 )
 
 
@@ -43,11 +45,16 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             if self.action in ('partial_update', 'update', 'destroy'):
                 permission_classes.append(IsApplicantOwner)
         elif self.action == 'retrieve':
-            permission_classes = [permissions.IsAuthenticated]
+            permission_classes = [
+                permissions.IsAuthenticated, IsApplicantOwnerOrStaffScoped,
+            ]
         elif self.action == 'list':
             permission_classes = [permissions.IsAuthenticated, IsApplicant]
         else:
-            permission_classes = [permissions.IsAuthenticated, IsApplicant, IsEmailVerified]
+            permission_classes = [
+                permissions.IsAuthenticated, IsApplicant, IsEmailVerified,
+                IsApplicantOwner,
+            ]
         return [p() for p in permission_classes]
 
     def get_queryset(self):
@@ -56,7 +63,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         if hasattr(user, 'applicant'):
             return qs.filter(applicant=user.applicant)
         if hasattr(user, 'universitystaff'):
-            return qs
+            return qs.filter(university=user.universitystaff.university)
         return qs.none()
 
     def create(self, request, *args, **kwargs):
@@ -72,6 +79,15 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(existing)
             return Response(serializer.data, status=status.HTTP_200_OK)
         return super().create(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        if instance.status != 'draft':
+            return Response(
+                {'error': {'code': 'NOT_DRAFT', 'message': 'Cannot edit a submitted application'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().partial_update(request, *args, **kwargs)
 
     def perform_destroy(self, instance):
         if instance.status != 'draft':
@@ -111,6 +127,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         doc = ApplicationDocument(
             application=application,
             document_type=document_type,
+            university=application.university,
             version=next_version,
         )
 
@@ -175,3 +192,21 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             for h in history_qs
         ]
         return Response(data)
+
+    @action(detail=True, methods=['post'], url_path='submit')
+    def submit(self, request, pk=None):
+        return Response({
+            'message': 'Submission endpoint — full logic in Sprint 5.',
+        })
+
+    @action(detail=True, methods=['patch'], url_path='status')
+    def status_change(self, request, pk=None):
+        return Response({
+            'message': 'Status change endpoint — full logic in Sprint 5.',
+        })
+
+    @action(detail=True, methods=['post'], url_path='offer-response')
+    def offer_response(self, request, pk=None):
+        return Response({
+            'message': 'Offer response endpoint — full logic in Sprint 6.',
+        })

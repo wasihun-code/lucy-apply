@@ -79,4 +79,19 @@ class IsApplicantOwner(BasePermission):
 
 class MFAVerified(BasePermission):
     def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if hasattr(request.user, 'universitystaff') or hasattr(request.user, 'platformadmin'):
+            return bool(request.session.get('mfa_verified', False))
         return True
+
+
+class IsApplicantOwnerOrStaffScoped(BasePermission):
+    def has_object_permission(self, request, view, obj):
+        if hasattr(request.user, 'applicant'):
+            return obj.applicant_id == request.user.applicant.id
+        if hasattr(request.user, 'universitystaff'):
+            if not hasattr(obj, 'university'):
+                return True
+            return obj.university_id == request.user.universitystaff.university_id
+        return False

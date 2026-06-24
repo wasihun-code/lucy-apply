@@ -6,7 +6,7 @@ class ApplicationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Application
         fields = ['id', 'program', 'admission_cycle', 'status', 'form_data', 'created_at']
-        read_only_fields = ['id', 'status', 'form_data', 'created_at']
+        read_only_fields = ['id', 'status', 'created_at']
 
     def create(self, validated_data):
         program = validated_data['program']

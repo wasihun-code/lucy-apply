@@ -1,8 +1,8 @@
 from django.db import models
-from identity.models import TimestampedUUIDModel
+from identity.models import TenantScopedModel
 
 
-class ApplicationDocument(TimestampedUUIDModel):
+class ApplicationDocument(TenantScopedModel):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('verified', 'Verified'),
@@ -27,4 +27,4 @@ class ApplicationDocument(TimestampedUUIDModel):
     reviewed_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
-        return f"{self.application.id} - {self.document_type} (v{self.version})"
+        return f"{self.application_id} - {self.document_type} (v{self.version})"

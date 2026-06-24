@@ -85,6 +85,7 @@ def existing_document(application):
     return ApplicationDocument.objects.create(
         application=application,
         document_type='transcript',
+        university=application.university,
         version=1,
     )
 

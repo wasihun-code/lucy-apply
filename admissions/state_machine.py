@@ -14,12 +14,31 @@ VALID_TRANSITIONS = {
     'declined': [],
 }
 
+DECISION_STATES = ['admitted', 'rejected', 'waitlisted']
+
 
 def transition_application(application, new_status, actor_type, actor_id, reason=''):
     if new_status not in VALID_TRANSITIONS.get(application.status, []):
         raise ValidationError(
             f"Cannot transition from '{application.status}' to '{new_status}'"
         )
+
+    if application.status == 'under_review' and new_status in DECISION_STATES:
+        required_types = [
+            d.get('type') for d in application.program.required_documents
+        ]
+        if required_types:
+            verified_types = set(
+                application.documents.filter(
+                    document_type__in=required_types,
+                    status='verified',
+                ).values_list('document_type', flat=True)
+            )
+            missing = [t for t in required_types if t not in verified_types]
+            if missing:
+                raise ValidationError(
+                    f"Cannot issue a decision: required documents not verified: {', '.join(missing)}"
+                )
 
     from_status = application.status
     application.status = new_status
