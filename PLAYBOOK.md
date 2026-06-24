@@ -58,7 +58,7 @@ opencode
 OpenCode will scan your repo and improve AGENTS.md with additional project-specific details it discovers. Let it run and commit the result.
 
 ### 3. Configure your model
-In `opencode.json`, verify the model is set to Claude Sonnet or the best model available to you. The build and plan agents both default to `anthropic/claude-sonnet-4-20250514` — adjust if needed.
+In `opencode.json`, verify the model is set to opencode zen or the best model available to you. The build and plan agents both default to opencode zen and deepseek v4 adjust if needed.
 
 ---
 

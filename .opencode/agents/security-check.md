@@ -1,7 +1,7 @@
 ---
 description: Security-focused review. Checks cross-tenant leaks, webhook bypass, fee tampering, JWT misuse. Run before any auth/payment/document code is merged.
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: opencode/mimo-v2.5-free
 temperature: 0.0
 permission:
   edit: deny

@@ -1,7 +1,7 @@
 ---
 description: Reviews code for tenant-scoping errors, permission gaps, and state machine violations. Read-only. Invoke with @review.
 mode: subagent
-model: anthropic/claude-sonnet-4-20250514
+model: opencode/mimo-v2.5-free
 temperature: 0.1
 permission:
   edit: deny
