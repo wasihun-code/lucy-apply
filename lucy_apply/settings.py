@@ -1,6 +1,9 @@
 import os
+import sys
 from pathlib import Path
 from datetime import timedelta
+
+from django.core.exceptions import ImproperlyConfigured
 
 import dj_database_url
 
@@ -147,3 +150,28 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
+
+TESTING = 'test' in sys.argv or os.environ.get('OPENSE_TESTING') == 'true'
+if TESTING:
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
+    CELERY_BROKER_URL = 'memory://'
+    CELERY_RESULT_BACKEND = None
+
+STRIPE_SECRET_KEY = os.environ.get('STRIPE_SECRET_KEY', '')
+STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
+
+if not TESTING and not DEBUG:
+    if not STRIPE_SECRET_KEY:
+        raise ImproperlyConfigured(
+            'STRIPE_SECRET_KEY must be set in production'
+        )
+    if not STRIPE_WEBHOOK_SECRET:
+        raise ImproperlyConfigured(
+            'STRIPE_WEBHOOK_SECRET must be set in production'
+        )
+
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend'
+)
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@lucyapply.com')
