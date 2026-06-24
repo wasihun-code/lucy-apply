@@ -61,6 +61,20 @@ export interface DocumentChecklistItem {
   uploaded: boolean
 }
 
+export interface Payment {
+  id: string
+  amount: string
+  currency: string
+  status: 'pending' | 'succeeded' | 'failed'
+  processor_reference: string
+  initiated_at: string
+  completed_at: string | null
+}
+
+export interface PaymentIntentResponse {
+  client_secret: string
+}
+
 export interface Application {
   id: string
   program: string
@@ -70,6 +84,7 @@ export interface Application {
   status: string
   form_data: Record<string, unknown>
   document_checklist: DocumentChecklistItem[]
+  payment: Payment | null
   created_at: string
   updated_at: string
 }

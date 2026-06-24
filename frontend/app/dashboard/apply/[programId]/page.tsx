@@ -11,6 +11,7 @@ import type {
   Program,
   AdmissionCycle,
   UploadUrlResponse,
+  PaymentIntentResponse,
 } from '@/lib/api'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
@@ -64,6 +65,8 @@ export default function ApplyPage({ params }: { params: { programId: string } })
   const [formData, setFormData] = useState<Record<string, string>>({})
   const [documents, setDocuments] = useState<ApplicationDocument[]>([])
   const [uploading, setUploading] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState<false | 'creating_payment' | 'submitting' | 'polling_payment' | 'success' | 'error'>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -207,6 +210,28 @@ export default function ApplyPage({ params }: { params: { programId: string } })
       refreshDocuments()
     }
   }, [application?.id, step])
+
+  async function handlePayAndSubmit() {
+    if (!application?.id || submitting) return
+    setSubmitError(null)
+    setSubmitting('creating_payment')
+    try {
+      await authFetch<PaymentIntentResponse>(
+        `applications/${application.id}/payment-intent/`,
+        { method: 'POST' }
+      )
+      setSubmitting('submitting')
+      await authFetch<Application>(
+        `applications/${application.id}/submit/`,
+        { method: 'POST' }
+      )
+      router.push(`/dashboard/applications/${application.id}/confirmation`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Submission failed'
+      setSubmitError(msg)
+      setSubmitting('error')
+    }
+  }
 
   async function handleUpload(docType: string) {
     if (!application?.id) return
@@ -383,6 +408,18 @@ export default function ApplyPage({ params }: { params: { programId: string } })
         >
           Step 2: Documents
         </div>
+        <div
+          style={{
+            padding: '0.4rem 0.8rem',
+            borderRadius: '4px',
+            background: step === 3 ? '#0d6efd' : '#e9ecef',
+            color: step === 3 ? '#fff' : '#666',
+            fontWeight: step === 3 ? 'bold' : 'normal',
+            fontSize: '0.85rem',
+          }}
+        >
+          Step 3: Review &amp; Submit
+        </div>
       </div>
 
       {step === 1 && (
@@ -542,7 +579,8 @@ export default function ApplyPage({ params }: { params: { programId: string } })
               &larr; Back to Form
             </button>
             <button
-              onClick={() => router.push('/dashboard')}
+              onClick={() => setStep(3)}
+              disabled={!allUploaded(checklist)}
               style={{
                 padding: '0.6rem 1.5rem',
                 background: allUploaded(checklist) ? '#198754' : '#6c757d',
@@ -550,14 +588,93 @@ export default function ApplyPage({ params }: { params: { programId: string } })
                 border: 'none',
                 borderRadius: '6px',
                 fontSize: '1rem',
-                cursor: 'pointer',
+                cursor: allUploaded(checklist) ? 'pointer' : 'not-allowed',
               }}
             >
-              Return to Dashboard
+              Next: Review &amp; Submit &rarr;
             </button>
           </div>
         </section>
       )}
+
+      {step === 3 && (
+        <section>
+          <h2>Review &amp; Submit</h2>
+
+          <div style={{ maxWidth: '500px', marginTop: '1rem' }}>
+            <div style={{ padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '1rem' }}>
+              <h3 style={{ margin: '0 0 0.5rem' }}>Program</h3>
+              <p style={{ margin: 0 }}>{program.name}</p>
+              <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.85rem' }}>{program.university_name}</p>
+            </div>
+
+            <div style={{ padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '1rem' }}>
+              <h3 style={{ margin: '0 0 0.5rem' }}>Documents</h3>
+              {checklist.map((item) => (
+                <p key={item.type} style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}>
+                  {item.label}:{' '}
+                  <span style={{ color: item.status === 'verified' ? '#198754' : '#856404' }}>
+                    {item.status === 'verified' ? 'Verified' : 'Pending review'}
+                  </span>
+                </p>
+              ))}
+            </div>
+
+            <div style={{ padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '1rem' }}>
+              <h3 style={{ margin: '0 0 0.5rem' }}>Application Fee</h3>
+              <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold' }}>
+                {program.fee_currency} {program.fee_amount}
+              </p>
+            </div>
+          </div>
+
+          {submitError && (
+            <div style={{ color: '#dc3545', marginBottom: '1rem', padding: '0.5rem', background: '#f8d7da', borderRadius: '4px' }}>
+              {submitError}
+            </div>
+          )}
+
+          <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+            <button
+              onClick={() => setStep(2)}
+              disabled={!!submitting}
+              style={{
+                padding: '0.6rem 1.5rem',
+                background: '#6c757d',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                cursor: !!submitting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              &larr; Back to Documents
+            </button>
+            <button
+              onClick={handlePayAndSubmit}
+              disabled={!!submitting}
+              style={{
+                padding: '0.6rem 1.5rem',
+                background: submitting && submitting !== 'error' ? '#6c757d' : '#198754',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '6px',
+                fontSize: '1rem',
+                cursor: submitting && submitting !== 'error' ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {submitting === 'creating_payment'
+                ? 'Creating payment...'
+                : submitting === 'submitting'
+                ? 'Submitting...'
+                : submitting === 'error'
+                ? 'Try Again'
+                : `Pay ${program.fee_currency} ${program.fee_amount} & Submit`}
+            </button>
+          </div>
+        </section>
+      )}
+
     </div>
   )
 }
