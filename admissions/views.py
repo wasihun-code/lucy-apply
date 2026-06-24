@@ -26,7 +26,7 @@ from payments.processor import create_payment_intent
 from identity.permissions import (
     IsApplicant, IsEmailVerified, IsUniversityStaff,
     IsScopedToUniversity, IsApplicantOwner,
-    IsApplicantOwnerOrStaffScoped,
+    IsApplicantOwnerOrStaffScoped, IsPlatformAdmin,
 )
 
 
@@ -55,6 +55,10 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             ]
         elif self.action == 'list':
             permission_classes = [permissions.IsAuthenticated, IsApplicant]
+        elif self.action == 'status_change':
+            permission_classes = [
+                permissions.IsAuthenticated, IsPlatformAdmin,
+            ]
         else:
             permission_classes = [
                 permissions.IsAuthenticated, IsApplicant, IsEmailVerified,
@@ -69,6 +73,8 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             return qs.filter(applicant=user.applicant)
         if hasattr(user, 'universitystaff'):
             return qs.filter(university=user.universitystaff.university)
+        if hasattr(user, 'platformadmin'):
+            return qs
         return qs.none()
 
     def create(self, request, *args, **kwargs):
@@ -92,7 +98,11 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 {'error': {'code': 'NOT_DRAFT', 'message': 'Cannot edit a submitted application'}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return super().partial_update(request, *args, **kwargs)
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        detail = ApplicationDetailSerializer(instance)
+        return Response(detail.data)
 
     def perform_destroy(self, instance):
         if instance.status != 'draft':
@@ -185,7 +195,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         application = self.get_object()
         history_qs = ApplicationStatusHistory.objects.filter(
             application=application
-        ).order_by('-created_at')
+        ).order_by('created_at')
         data = [
             {
                 'from_status': h.from_status,
@@ -333,12 +343,74 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'], url_path='status')
     def status_change(self, request, pk=None):
-        return Response({
-            'message': 'Status change endpoint — full logic in Sprint 5.',
-        })
+        # TODO Sprint 7: replace with Officer review flow
+        application = self.get_object()
+        new_status = request.data.get('status')
+        reason = request.data.get('reason', '')
+
+        if not new_status:
+            return Response(
+                {'error': {'code': '400', 'message': 'status is required'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            transition_application(
+                application, new_status,
+                actor_type='system',
+                actor_id=request.user.platformadmin.id,
+                reason=reason,
+            )
+        except ValidationError as e:
+            return Response(
+                {'error': {'code': 'INVALID_TRANSITION', 'message': str(e)}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = ApplicationDetailSerializer(application)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'], url_path='offer-response')
     def offer_response(self, request, pk=None):
-        return Response({
-            'message': 'Offer response endpoint — full logic in Sprint 6.',
-        })
+        application = self.get_object()
+        response = request.data.get('response', '')
+
+        if response not in ('accepted', 'declined'):
+            return Response(
+                {'error': {'code': '400', 'message': 'response must be "accepted" or "declined"'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if application.status != 'admitted':
+            return Response(
+                {'error': {'code': 'NOT_ADMITTED', 'message': 'Can only respond to an admit offer'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if application.offer_response_at is not None:
+            return Response(
+                {'error': {'code': 'ALREADY_RESPONDED', 'message': 'Offer has already been responded to'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        application.offer_response_at = timezone.now()
+        application.save(update_fields=['offer_response_at', 'updated_at'])
+
+        try:
+            transition_application(
+                application, response,
+                actor_type='applicant',
+                actor_id=request.user.applicant.id,
+                reason=f'Applicant {response} the offer',
+            )
+        except ValidationError as e:
+            application.offer_response_at = None
+            application.save(update_fields=['offer_response_at', 'updated_at'])
+            return Response(
+                {'error': {'code': 'TRANSITION_FAILED', 'message': str(e)}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # TODO Sprint 8: also notify UniversityAdmin
+        serializer = ApplicationDetailSerializer(application)
+        return Response(serializer.data)

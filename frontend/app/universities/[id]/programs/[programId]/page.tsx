@@ -8,7 +8,21 @@ export default async function ProgramDetailPage({
 }: {
   params: { id: string; programId: string }
 }) {
-  const program = await fetchAPI<Program>(`programs/${params.programId}/`)
+  let program: Program | null = null
+  try {
+    program = await fetchAPI<Program>(`programs/${params.programId}/`)
+  } catch {
+    return (
+      <div>
+        <Link href={`/universities/${params.id}`} style={{ fontSize: '0.875rem', marginBottom: '1rem', display: 'inline-block' }}>
+          &larr; Back to Program List
+        </Link>
+        <p style={{ marginTop: '2rem', color: '#666' }}>
+          Unable to load program details. Please try again later.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div>

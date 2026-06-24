@@ -4,10 +4,27 @@ import { fetchAPI, type University, type Program, type PaginatedResponse } from 
 export const dynamic = 'force-dynamic'
 
 export default async function UniversityDetailPage({ params }: { params: { id: string } }) {
-  const [university, programsData] = await Promise.all([
-    fetchAPI<University>(`universities/${params.id}/`),
-    fetchAPI<PaginatedResponse<Program>>(`programs/?university=${params.id}`),
-  ])
+  let university: University | null = null
+  let programs: Program[] = []
+  try {
+    const [uni, programsData] = await Promise.all([
+      fetchAPI<University>(`universities/${params.id}/`),
+      fetchAPI<PaginatedResponse<Program>>(`programs/?university=${params.id}`),
+    ])
+    university = uni
+    programs = programsData.results
+  } catch {
+    return (
+      <div>
+        <Link href="/universities" style={{ fontSize: '0.875rem', marginBottom: '1rem', display: 'inline-block' }}>
+          &larr; Back to Universities
+        </Link>
+        <p style={{ marginTop: '2rem', color: '#666' }}>
+          Unable to load university details. Please try again later.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -18,11 +35,11 @@ export default async function UniversityDetailPage({ params }: { params: { id: s
       <p style={{ margin: '1rem 0', color: '#666' }}>{university.description}</p>
 
       <h2 style={{ marginTop: '2rem', marginBottom: '1rem' }}>Programs</h2>
-      {programsData.results.length === 0 ? (
+      {programs.length === 0 ? (
         <p style={{ color: '#666' }}>No programs available at this time.</p>
       ) : (
         <div className="card-grid">
-          {programsData.results.map((p) => (
+          {programs.map((p) => (
             <Link
               key={p.id}
               href={`/universities/${params.id}/programs/${p.id}`}

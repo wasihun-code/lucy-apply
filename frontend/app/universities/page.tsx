@@ -4,8 +4,20 @@ import { fetchAPI, type University, type PaginatedResponse } from '@/lib/api'
 export const dynamic = 'force-dynamic'
 
 export default async function UniversitiesPage() {
-  const data = await fetchAPI<PaginatedResponse<University>>('universities/')
-  const universities = data.results
+  let universities: University[] = []
+  try {
+    const data = await fetchAPI<PaginatedResponse<University>>('universities/')
+    universities = data.results
+  } catch {
+    return (
+      <div>
+        <h1>Universities</h1>
+        <p style={{ marginTop: '1rem', color: '#666' }}>
+          Unable to load universities at this time. Please try again later.
+        </p>
+      </div>
+    )
+  }
 
   return (
     <div>

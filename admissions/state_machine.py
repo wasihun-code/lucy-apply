@@ -23,6 +23,12 @@ def transition_application(application, new_status, actor_type, actor_id, reason
             f"Cannot transition from '{application.status}' to '{new_status}'"
         )
 
+    if application.status == 'admitted' and application.offer_response_at is not None:
+        if new_status not in ('accepted', 'declined'):
+            raise ValidationError(
+                'Offer has already been responded to — no further transitions from admitted'
+            )
+
     if application.status == 'under_review' and new_status in DECISION_STATES:
         required_types = [
             d.get('type') for d in application.program.required_documents
@@ -48,9 +54,6 @@ def transition_application(application, new_status, actor_type, actor_id, reason
     if from_status == 'draft' and new_status == 'submitted':
         application.submitted_at = timezone.now()
         update_fields.append('submitted_at')
-    elif from_status == 'admitted' and new_status in ('accepted', 'declined'):
-        application.offer_response_at = timezone.now()
-        update_fields.append('offer_response_at')
 
     if new_status in ('admitted', 'rejected', 'waitlisted') and from_status != new_status:
         application.decision_at = timezone.now()

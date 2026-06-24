@@ -5,7 +5,7 @@ from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 from unittest.mock import patch
 
-from identity.models import Applicant
+from identity.models import Applicant, PlatformAdmin
 from universities.models import University
 from programs.models import Program, AdmissionCycle
 from admissions.models import Application
@@ -170,6 +170,41 @@ def application_with_docs_no_payment(application):
             version=1,
         )
     return application
+
+
+@pytest.fixture
+def platform_admin_user(db):
+    return PlatformAdmin.objects.create_user(
+        email='admin@platform.com',
+        full_name='Platform Admin',
+        password='securepass123',
+    )
+
+
+@pytest.fixture
+def platform_admin_client(platform_admin_user):
+    client = APIClient()
+    token = get_token_for_user(platform_admin_user)
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+    return client
+
+
+@pytest.fixture
+def admitted_application(application):
+    app = application
+    app.status = 'admitted'
+    app.submitted_at = timezone.now() - timedelta(days=1)
+    app.decision_at = timezone.now()
+    app.save(update_fields=['status', 'submitted_at', 'decision_at', 'updated_at'])
+    return app
+
+
+@pytest.fixture
+def responded_application(admitted_application):
+    app = admitted_application
+    app.offer_response_at = timezone.now()
+    app.save(update_fields=['offer_response_at', 'updated_at'])
+    return app
 
 
 @pytest.fixture

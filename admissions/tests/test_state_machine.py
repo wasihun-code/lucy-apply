@@ -48,14 +48,15 @@ class TestValidTransitions:
 
     def test_admitted_to_accepted(self, application):
         application.status = 'admitted'
+        application.offer_response_at = timezone.now()
         application.save()
         transition_application(application, 'accepted', 'applicant', str(application.applicant.id))
         application.refresh_from_db()
         assert application.status == 'accepted'
-        assert application.offer_response_at is not None
 
     def test_admitted_to_declined(self, application):
         application.status = 'admitted'
+        application.offer_response_at = timezone.now()
         application.save()
         transition_application(application, 'declined', 'applicant', str(application.applicant.id))
         application.refresh_from_db()
@@ -110,6 +111,21 @@ class TestInvalidTransitions:
         application.save()
         with pytest.raises(ValidationError):
             transition_application(application, 'draft', 'applicant', str(application.applicant.id))
+
+    def test_reversal_blocked_if_offer_response_at_set(self, application):
+        application.status = 'admitted'
+        application.offer_response_at = timezone.now()
+        application.save()
+        with pytest.raises(ValidationError, match='already been responded'):
+            transition_application(application, 'under_review', 'university_staff', '00000000-0000-0000-0000-000000000001')
+
+    def test_accept_allowed_even_if_offer_response_at_set(self, application):
+        application.status = 'admitted'
+        application.offer_response_at = timezone.now()
+        application.save()
+        transition_application(application, 'accepted', 'applicant', str(application.applicant.id))
+        application.refresh_from_db()
+        assert application.status == 'accepted'
 
     def test_decision_fails_without_verified_documents(self, application):
         application.status = 'under_review'

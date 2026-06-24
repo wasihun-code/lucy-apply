@@ -1,7 +1,9 @@
 import io
 import json
+from unittest.mock import patch
 
 from rest_framework import status
+from django.utils import timezone
 
 
 class TestCreateDraftApplication:
@@ -78,3 +80,76 @@ class TestDeleteDraftApplication:
     def test_unverified_cannot_delete(self, unverified_auth_client, application):
         response = unverified_auth_client.delete(f'/api/v1/applications/{application.id}/')
         assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+class TestHistoryEndpoint:
+    def test_history_returns_transitions_in_order(self, auth_client, application):
+        from admissions.state_machine import transition_application
+
+        transition_application(
+            application, 'submitted', 'applicant', str(application.applicant.id),
+            reason='First transition',
+        )
+        application.refresh_from_db()
+        transition_application(
+            application, 'under_review', 'university_staff',
+            '00000000-0000-0000-0000-000000000001',
+            reason='Second transition',
+        )
+
+        response = auth_client.get(
+            f'/api/v1/applications/{application.id}/history/',
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert len(response.data) == 2
+        assert response.data[0]['from_status'] == 'draft'
+        assert response.data[0]['to_status'] == 'submitted'
+        assert response.data[0]['reason'] == 'First transition'
+        assert response.data[1]['from_status'] == 'submitted'
+        assert response.data[1]['to_status'] == 'under_review'
+        assert response.data[1]['reason'] == 'Second transition'
+
+    def test_history_blocked_for_other_applicant(self, other_auth_client, application):
+        from admissions.state_machine import transition_application
+
+        transition_application(
+            application, 'submitted', 'applicant', str(application.applicant.id),
+        )
+        response = other_auth_client.get(
+            f'/api/v1/applications/{application.id}/history/',
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+class TestCelerySignals:
+    def test_decision_email_fires_on_admitted(self, application, verified_documents):
+        from admissions.state_machine import transition_application
+
+        application.status = 'under_review'
+        application.save(update_fields=['status', 'updated_at'])
+
+        with patch('notifications.tasks.send_decision_email.delay') as mock:
+            transition_application(
+                application, 'admitted', 'university_staff',
+                '00000000-0000-0000-0000-000000000001',
+            )
+            mock.assert_called_once()
+            args = mock.call_args[0]
+            assert args[0] == application.applicant.email
+            assert args[2] == 'admitted'
+
+    def test_offer_response_email_fires_on_accepted(self, admitted_application):
+        from admissions.state_machine import transition_application
+
+        app = admitted_application
+        app.offer_response_at = timezone.now()
+        app.save(update_fields=['offer_response_at', 'updated_at'])
+
+        with patch('notifications.tasks.send_offer_response_email.delay') as mock:
+            transition_application(
+                app, 'accepted', 'applicant', str(app.applicant.id),
+            )
+            mock.assert_called_once()
+            args = mock.call_args[0]
+            assert args[0] == app.applicant.email
+            assert args[2] == 'accepted'

@@ -75,6 +75,14 @@ export interface PaymentIntentResponse {
   client_secret: string
 }
 
+export interface HistoryItem {
+  from_status: string | null
+  to_status: string
+  changed_by_type: string
+  reason: string
+  created_at: string
+}
+
 export interface Application {
   id: string
   program: string
@@ -85,6 +93,10 @@ export interface Application {
   form_data: Record<string, unknown>
   document_checklist: DocumentChecklistItem[]
   payment: Payment | null
+  submitted_at: string | null
+  decision_at: string | null
+  decision_by: string | null
+  offer_response_at: string | null
   created_at: string
   updated_at: string
 }

@@ -92,39 +92,44 @@ export default function DashboardPage() {
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '600px' }}>
-            {applications.map((app) => (
-              <Link
-                key={app.id}
-                href={`/dashboard/apply/${app.program}/?cycle=${app.admission_cycle}`}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '0.75rem 1rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                  textDecoration: 'none',
-                  color: 'inherit',
-                }}
-              >
-                <div>
-                  <strong>{app.program_name}</strong>
-                  <br />
-                  <span style={{ fontSize: '0.8rem', color: '#666' }}>{app.university_name}</span>
-                </div>
-                <span
+            {applications.map((app) => {
+              const href = app.status === 'draft'
+                ? `/dashboard/apply/${app.program}/?cycle=${app.admission_cycle}`
+                : `/dashboard/applications/${app.id}/`
+              return (
+                <Link
+                  key={app.id}
+                  href={href}
                   style={{
-                    fontSize: '0.75rem',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: '4px',
-                    background: statusBg(app.status),
-                    color: statusColor(app.status),
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '0.75rem 1rem',
+                    border: '1px solid #ddd',
+                    borderRadius: '6px',
+                    textDecoration: 'none',
+                    color: 'inherit',
                   }}
                 >
-                  {app.status.replace('_', ' ')}
-                </span>
-              </Link>
-            ))}
+                  <div>
+                    <strong>{app.program_name}</strong>
+                    <br />
+                    <span style={{ fontSize: '0.8rem', color: '#666' }}>{app.university_name}</span>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: '0.75rem',
+                      padding: '0.2rem 0.5rem',
+                      borderRadius: '4px',
+                      background: statusBg(app.status),
+                      color: statusColor(app.status),
+                    }}
+                  >
+                    {statusLabel(app.status)}
+                  </span>
+                </Link>
+              )
+            })}
           </div>
         )}
       </section>
@@ -132,19 +137,28 @@ export default function DashboardPage() {
   )
 }
 
+function statusLabel(status: string): string {
+  return status.replace(/_/g, ' ')
+}
+
 function statusBg(status: string): string {
   switch (status) {
     case 'draft':
       return '#e9ecef'
     case 'submitted':
+      return '#cfe2ff'
     case 'under_review':
       return '#fff3cd'
     case 'admitted':
-    case 'accepted':
       return '#d1e7dd'
     case 'rejected':
-    case 'declined':
       return '#f8d7da'
+    case 'waitlisted':
+      return '#ffe0b2'
+    case 'accepted':
+      return '#1b5e20'
+    case 'declined':
+      return '#e9ecef'
     default:
       return '#e9ecef'
   }
@@ -153,16 +167,19 @@ function statusBg(status: string): string {
 function statusColor(status: string): string {
   switch (status) {
     case 'draft':
+    case 'declined':
       return '#666'
     case 'submitted':
     case 'under_review':
       return '#664d03'
     case 'admitted':
-    case 'accepted':
       return '#0f5132'
     case 'rejected':
-    case 'declined':
       return '#842029'
+    case 'waitlisted':
+      return '#e65100'
+    case 'accepted':
+      return '#fff'
     default:
       return '#666'
   }
