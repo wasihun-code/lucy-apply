@@ -3,12 +3,24 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
+from unittest.mock import patch
 
 from identity.models import Applicant
 from universities.models import University
 from programs.models import Program, AdmissionCycle
 from admissions.models import Application
 from documents.models import ApplicationDocument
+from payments.models import Payment
+
+
+@pytest.fixture(autouse=True)
+def patch_celery_tasks():
+    with patch('notifications.tasks.send_application_submitted_email.delay'), \
+         patch('notifications.tasks.send_decision_email.delay'), \
+         patch('notifications.tasks.send_offer_response_email.delay'), \
+         patch('notifications.tasks.send_document_flagged_email.delay'), \
+         patch('notifications.tasks.send_verification_email.delay'):
+        yield
 
 
 @pytest.fixture
@@ -131,3 +143,44 @@ def unverified_auth_client(unverified_applicant):
     token = get_token_for_user(unverified_applicant)
     client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
     return client
+
+
+@pytest.fixture
+def application_with_pending_payment(application):
+    Payment.objects.create(
+        university=application.university,
+        application=application,
+        amount=application.program.fee_amount,
+        currency='USD',
+        processor_reference='secret_mock_pending',
+        status='pending',
+        initiated_at=timezone.now(),
+    )
+    return application
+
+
+@pytest.fixture
+def application_with_docs_no_payment(application):
+    for req in application.program.required_documents:
+        ApplicationDocument.objects.create(
+            application=application,
+            document_type=req['type'],
+            university=application.university,
+            status='pending',
+            version=1,
+        )
+    return application
+
+
+@pytest.fixture
+def application_with_docs_and_pending_payment(application_with_pending_payment):
+    app = application_with_pending_payment
+    for req in app.program.required_documents:
+        ApplicationDocument.objects.create(
+            application=app,
+            document_type=req['type'],
+            university=app.university,
+            status='pending',
+            version=1,
+        )
+    return app

@@ -2,6 +2,8 @@ import uuid
 
 from django.shortcuts import get_object_or_404
 from django.core.exceptions import ValidationError
+from django.conf import settings
+from django.utils import timezone
 
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
@@ -18,6 +20,9 @@ from .serializers import (
 )
 from documents.models import ApplicationDocument
 from documents.serializers import ApplicationDocumentSerializer
+from payments.models import Payment
+from payments.serializers import PaymentSerializer
+from payments.processor import create_payment_intent
 from identity.permissions import (
     IsApplicant, IsEmailVerified, IsUniversityStaff,
     IsScopedToUniversity, IsApplicantOwner,
@@ -193,11 +198,138 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         ]
         return Response(data)
 
+    @action(detail=True, methods=['post'], url_path='payment-intent')
+    def payment_intent(self, request, pk=None):
+        application = self.get_object()
+
+        if application.status != 'draft':
+            return Response(
+                {'error': {'code': 'NOT_DRAFT', 'message': 'Payment can only be initiated on draft applications'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        cycle = application.admission_cycle
+        if cycle.status != 'open':
+            return Response(
+                {'error': {'code': 'CYCLE_CLOSED', 'message': f'Admission cycle is {cycle.status}'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        required_types = [
+            d.get('type') for d in application.program.required_documents
+        ]
+        if required_types:
+            uploaded_types = set(
+                ApplicationDocument.objects.filter(
+                    application=application,
+                    document_type__in=required_types,
+                ).values_list('document_type', flat=True).distinct()
+            )
+            missing = [t for t in required_types if t not in uploaded_types]
+            if missing:
+                return Response(
+                    {'error': {'code': 'MISSING_DOCS', 'message': f'Upload required documents before payment: {", ".join(missing)}'}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        existing = getattr(application, 'payment', None)
+        if existing:
+            if existing.status == 'succeeded':
+                return Response(
+                    {'error': {'code': 'ALREADY_PAID', 'message': 'Payment already completed for this application'}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            return Response({
+                'client_secret': existing.processor_reference,
+                'payment_id': str(existing.id),
+            })
+
+        amount = application.program.fee_amount
+        currency = application.program.fee_currency
+
+        intent = create_payment_intent(amount, currency)
+
+        payment = Payment.objects.create(
+            university=application.university,
+            application=application,
+            amount=amount,
+            currency=currency,
+            processor_reference=intent.get('client_secret', ''),
+            status='pending',
+            initiated_at=timezone.now(),
+        )
+
+        return Response({
+            'client_secret': intent['client_secret'],
+            'payment_id': str(payment.id),
+        })
+
+    @action(detail=True, methods=['get'], url_path='payment')
+    def payment(self, request, pk=None):
+        application = self.get_object()
+        payment = getattr(application, 'payment', None)
+        if not payment:
+            return Response(
+                {'error': {'code': 'NO_PAYMENT', 'message': 'No payment found for this application'}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = PaymentSerializer(payment)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['post'], url_path='submit')
     def submit(self, request, pk=None):
-        return Response({
-            'message': 'Submission endpoint — full logic in Sprint 5.',
-        })
+        application = self.get_object()
+
+        if application.status != 'draft':
+            return Response(
+                {'error': {'code': 'NOT_DRAFT', 'message': 'Only draft applications can be submitted'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        required_types = [
+            d.get('type') for d in application.program.required_documents
+        ]
+        if required_types:
+            uploaded_types = set(
+                ApplicationDocument.objects.filter(
+                    application=application,
+                    document_type__in=required_types,
+                ).values_list('document_type', flat=True).distinct()
+            )
+            missing = [t for t in required_types if t not in uploaded_types]
+            if missing:
+                return Response(
+                    {'error': {'code': 'MISSING_DOCS', 'message': f'Upload required documents before submitting: {", ".join(missing)}'}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        payment = getattr(application, 'payment', None)
+        if not payment:
+            return Response(
+                {'error': {'code': 'PAYMENT_REQUIRED', 'message': 'Payment must be completed before submitting'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if payment.status == 'pending' and not settings.STRIPE_SECRET_KEY:
+            payment.status = 'succeeded'
+            payment.completed_at = timezone.now()
+            payment.save(update_fields=['status', 'completed_at', 'updated_at'])
+
+        if payment.status != 'succeeded':
+            return Response(
+                {'error': {'code': 'PAYMENT_REQUIRED', 'message': 'Payment must be completed before submitting'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        transition_application(
+            application, 'submitted',
+            actor_type='applicant',
+            actor_id=request.user.applicant.id,
+            reason='Application submitted by applicant',
+        )
+
+        serializer = ApplicationDetailSerializer(application)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['patch'], url_path='status')
     def status_change(self, request, pk=None):

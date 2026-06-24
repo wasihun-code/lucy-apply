@@ -45,7 +45,10 @@ def transition_application(application, new_status, actor_type, actor_id, reason
 
     update_fields = ['status']
 
-    if from_status == 'admitted' and new_status in ('accepted', 'declined'):
+    if from_status == 'draft' and new_status == 'submitted':
+        application.submitted_at = timezone.now()
+        update_fields.append('submitted_at')
+    elif from_status == 'admitted' and new_status in ('accepted', 'declined'):
         application.offer_response_at = timezone.now()
         update_fields.append('offer_response_at')
 

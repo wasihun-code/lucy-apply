@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Application
+from payments.models import Payment
 
 
 class ApplicationCreateSerializer(serializers.ModelSerializer):
@@ -31,10 +32,24 @@ class ApplicationDetailSerializer(serializers.ModelSerializer):
     document_checklist = serializers.SerializerMethodField()
     program_name = serializers.CharField(source='program.name', read_only=True)
     university_name = serializers.CharField(source='university.name', read_only=True)
+    payment = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
         fields = '__all__'
+
+    def get_payment(self, obj):
+        payment = getattr(obj, 'payment', None)
+        if payment:
+            return {
+                'id': str(payment.id),
+                'amount': str(payment.amount),
+                'currency': payment.currency,
+                'status': payment.status,
+                'initiated_at': payment.initiated_at,
+                'completed_at': payment.completed_at,
+            }
+        return None
 
     def get_document_checklist(self, obj):
         checklist = []
