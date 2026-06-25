@@ -25,4 +25,5 @@ urlpatterns = [
     path('logout/', views.LogoutView.as_view(), name='auth-logout'),
     path('mfa/setup/', views.MFASetupView.as_view(), name='auth-mfa-setup'),
     path('mfa/verify/', views.MFAVerifyView.as_view(), name='auth-mfa-verify'),
+    path('me/', views.AuthMeView.as_view(), name='auth-me'),
 ]

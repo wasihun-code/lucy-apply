@@ -4,7 +4,7 @@ from django.contrib.auth.base_user import BaseUserManager
 
 class UserManager(BaseUserManager):
     def create_user(self, email, full_name, password=None, **extra_fields):
-        email = self.normalize_email(email)
+        email = self.normalize_email(email).lower()
         user = self.model(email=email, full_name=full_name, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)

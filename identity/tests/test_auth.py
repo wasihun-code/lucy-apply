@@ -133,6 +133,42 @@ class TestEmailVerification:
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    def test_verify_with_case_insensitive_email(self):
+        applicant = Applicant.objects.create_user(
+            email='Student@Test.com',
+            full_name='Test Student',
+            password='securepass123',
+            country_of_residence='Ethiopia',
+        )
+        token = EmailVerificationToken.objects.create(applicant=applicant)
+        client = APIClient()
+        response = client.post(
+            '/api/v1/auth/verify-email/',
+            {'email': 'student@test.com', 'token': token.token},
+            format='json',
+        )
+        assert response.status_code == status.HTTP_200_OK
+        applicant.refresh_from_db()
+        assert applicant.email_verified is True
+
+    def test_verify_with_mixed_case_email_in_request(self):
+        applicant = Applicant.objects.create_user(
+            email='alice@example.com',
+            full_name='Alice',
+            password='securepass123',
+            country_of_residence='Ethiopia',
+        )
+        token = EmailVerificationToken.objects.create(applicant=applicant)
+        client = APIClient()
+        response = client.post(
+            '/api/v1/auth/verify-email/',
+            {'email': 'ALICE@EXAMPLE.COM', 'token': token.token},
+            format='json',
+        )
+        assert response.status_code == status.HTTP_200_OK
+        applicant.refresh_from_db()
+        assert applicant.email_verified is True
+
 
 @pytest.mark.django_db
 class TestIsEmailVerifiedPermission:

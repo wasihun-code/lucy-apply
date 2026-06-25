@@ -41,8 +41,11 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/lucy_apply
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: dev-secret-key-not-for-production
-      DEBUG: "True"
+      DEBUG: "False"
       ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PUBLIC_KEY: ${STRIPE_PUBLIC_KEY}
 
   celery-worker:
     build:
@@ -58,13 +61,17 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/lucy_apply
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: dev-secret-key-not-for-production
-      DEBUG: "True"
+      DEBUG: "False"
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
 
   celery-beat:
     build:
       context: .
       dockerfile: Dockerfile.backend
-    command: celery -A lucy_apply beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    command: >
+      sh -c "rm -f celerybeat-schedule celerybeat-schedule.db &&
+             celery -A lucy_apply beat --loglevel=info --schedule=/tmp/celerybeat-schedule"
     depends_on:
       db:
         condition: service_healthy
@@ -74,19 +81,22 @@ services:
       DATABASE_URL: postgres://postgres:postgres@db:5432/lucy_apply
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: dev-secret-key-not-for-production
-      DEBUG: "True"
+      DEBUG: "False"
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8001/api/v1/
     ports:
       - "3000:3000"
     depends_on:
       - backend
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8001/api/v1/
-      - API_URL=http://backend:8080/api/v1/
+      API_URL: http://backend:8080/api/v1/
 
 volumes:
   postgres_data:

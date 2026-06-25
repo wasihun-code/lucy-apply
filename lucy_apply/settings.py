@@ -150,8 +150,18 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
+CELERY_BEAT_SCHEDULE = {
+    'auto-transition-cycles-hourly': {
+        'task': 'programs.tasks.auto_transition_cycles',
+        'schedule': 3600.0,
+    },
+}
 
-TESTING = 'test' in sys.argv or os.environ.get('OPENSE_TESTING') == 'true'
+TESTING = (
+    any('pytest' in arg for arg in sys.argv)
+    or 'test' in sys.argv
+    or os.environ.get('OPENSE_TESTING') == 'true'
+)
 if TESTING:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True

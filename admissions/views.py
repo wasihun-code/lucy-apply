@@ -22,7 +22,7 @@ from documents.models import ApplicationDocument
 from documents.serializers import ApplicationDocumentSerializer
 from payments.models import Payment
 from payments.serializers import PaymentSerializer
-from payments.processor import create_payment_intent
+from payments.processor import create_payment_intent, is_mock_mode
 from identity.permissions import (
     IsApplicant, IsEmailVerified, IsUniversityStaff,
     IsScopedToUniversity, IsApplicantOwner,
@@ -98,7 +98,12 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 {'error': {'code': 'NOT_DRAFT', 'message': 'Cannot edit a submitted application'}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        data = request.data.copy()
+        if 'form_data' in data and isinstance(data['form_data'], dict):
+            merged = dict(instance.form_data)
+            merged.update(data['form_data'])
+            data['form_data'] = merged
+        serializer = self.get_serializer(instance, data=data, partial=True)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
         detail = ApplicationDetailSerializer(instance)
@@ -320,7 +325,7 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if payment.status == 'pending' and not settings.STRIPE_SECRET_KEY:
+        if payment.status == 'pending' and is_mock_mode():
             payment.status = 'succeeded'
             payment.completed_at = timezone.now()
             payment.save(update_fields=['status', 'completed_at', 'updated_at'])

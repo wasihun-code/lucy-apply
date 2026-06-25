@@ -32,6 +32,22 @@ export default function LoginPage() {
       const data = await res.json()
       document.cookie = `access_token=${data.access}; path=/; max-age=1800; SameSite=Lax`
       document.cookie = `refresh_token=${data.refresh}; path=/; max-age=86400; SameSite=Lax`
+
+      const meRes = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'}auth/me/`,
+        { headers: { Authorization: `Bearer ${data.access}` } },
+      )
+      if (meRes.ok) {
+        const me = await meRes.json()
+        if (me.role === 'universitystaff') {
+          router.push('/portal')
+          return
+        }
+        if (me.role === 'platformadmin') {
+          router.push('/admin/')
+          return
+        }
+      }
       router.push('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')

@@ -15,6 +15,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop('password')
+        validated_data['email'] = Applicant.objects.normalize_email(validated_data['email']).lower()
         applicant = Applicant(**validated_data)
         applicant.set_password(password)
         applicant.save()

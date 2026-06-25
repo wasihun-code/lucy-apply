@@ -47,7 +47,7 @@ class VerifyEmailView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email', '')
+        email = Applicant.objects.normalize_email(request.data.get('email', '')).lower()
         token_value = request.data.get('token', '')
         applicant = get_object_or_404(Applicant, email=email)
         token = get_object_or_404(
@@ -72,7 +72,7 @@ class ResendVerificationView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email', '')
+        email = Applicant.objects.normalize_email(request.data.get('email', '')).lower()
         applicant = get_object_or_404(Applicant, email=email)
         if applicant.email_verified:
             return Response(
@@ -91,7 +91,7 @@ class ForgotPasswordView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email', '')
+        email = Applicant.objects.normalize_email(request.data.get('email', '')).lower()
         applicant = get_object_or_404(Applicant, email=email)
         PasswordResetToken.objects.filter(
             applicant=applicant, used=False
@@ -105,7 +105,7 @@ class ResetPasswordView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email', '')
+        email = Applicant.objects.normalize_email(request.data.get('email', '')).lower()
         token_value = request.data.get('token', '')
         new_password = request.data.get('new_password', '')
         applicant = get_object_or_404(Applicant, email=email)
@@ -179,3 +179,37 @@ class ApplicantViewSet(viewsets.GenericViewSet):
     def me(self, request):
         serializer = self.get_serializer(request.user.applicant)
         return Response(serializer.data)
+
+
+class AuthMeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        if hasattr(user, 'applicant'):
+            return Response({
+                'role': 'applicant',
+                'email': user.email,
+                'full_name': user.full_name,
+            })
+        if hasattr(user, 'universitystaff'):
+            staff = user.universitystaff
+            return Response({
+                'role': 'universitystaff',
+                'email': user.email,
+                'full_name': user.full_name,
+                'university': str(staff.university_id),
+                'university_name': staff.university.name,
+                'permission_level': staff.permission_level,
+            })
+        if hasattr(user, 'platformadmin'):
+            return Response({
+                'role': 'platformadmin',
+                'email': user.email,
+                'full_name': user.full_name,
+            })
+        return Response({
+            'role': 'unknown',
+            'email': user.email,
+            'full_name': user.full_name,
+        })
