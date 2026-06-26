@@ -162,7 +162,7 @@ TESTING = (
     or 'test' in sys.argv
     or os.environ.get('OPENSE_TESTING') == 'true'
 )
-if TESTING:
+if TESTING or DEBUG:
     CELERY_TASK_ALWAYS_EAGER = True
     CELERY_TASK_EAGER_PROPAGATES = True
     CELERY_BROKER_URL = 'memory://'

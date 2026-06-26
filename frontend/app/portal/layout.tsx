@@ -98,6 +98,19 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </h1>
         <div style={{ display: 'flex', gap: '1rem', marginLeft: 'auto' }}>
           <Link
+            href="/portal/applications"
+            style={{
+              padding: '0.4rem 0.8rem',
+              background: pathname.startsWith('/portal/applications') ? '#0d6efd' : '#e9ecef',
+              color: pathname.startsWith('/portal/applications') ? '#fff' : '#333',
+              borderRadius: '4px',
+              textDecoration: 'none',
+              fontSize: '0.85rem',
+            }}
+          >
+            Applications
+          </Link>
+          <Link
             href="/portal/programs"
             style={{
               padding: '0.4rem 0.8rem',

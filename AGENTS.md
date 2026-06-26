@@ -91,3 +91,32 @@ Immutable: `accepted` and `declined`. All transitions go through `transition_app
 | `context/PERMISSIONS.md` | Permission classes |
 | `context/STATE_MACHINES.md` | Status transitions |
 | `context/SECURITY.md` | Auth/payment/document code |
+
+## Database Isolation (non-negotiable)
+
+The QA regression suite and pytest **must never** touch the development database (`db.sqlite3`).
+
+### QA Suite (`qa/run_all.sh`)
+- Uses `lucy_apply/settings_qa.py` which sets `DATABASES` to `qa_db.sqlite3`
+- `run_all.sh` orchestrates: setup_db → seed data → start server (port 8001) → run tests → teardown
+- `DJANGO_SETTINGS_MODULE=lucy_apply.settings_qa` is exported so all child shells use the QA DB
+- The QA database is deleted on teardown — each run starts fresh
+- Individual test scripts (run directly, not via `run_all.sh`) use the dev server/dev DB as before
+
+### pytest
+- Uses Django's built-in test runner with an in-memory SQLite database
+- Never touches `db.sqlite3` — verified by unchanged timestamp before/after runs
+- 179 tests all pass in isolation
+
+### Running
+```bash
+# Full isolated QA regression (creates/starts/tests/cleans up)
+bash qa/run_all.sh
+
+# pytest (always isolated via in-memory DB)
+venv/bin/python -m pytest
+
+# Dev workflow (runs against dev DB — for individual script debugging)
+# 1. Start dev server:  venv/bin/python manage.py runserver
+# 2. Run a script:      bash qa/auth/01_register.sh
+```

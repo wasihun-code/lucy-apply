@@ -8,6 +8,7 @@ class ApplicationDocumentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'document_type', 'file', 'object_key',
             'status', 'flagged_reason', 'version',
+            'reviewed_by', 'reviewed_at',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['status', 'version', 'id', 'created_at', 'updated_at']
+        read_only_fields = ['status', 'version', 'id', 'reviewed_by', 'reviewed_at', 'created_at', 'updated_at']

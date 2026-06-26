@@ -4,7 +4,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from identity.models import Applicant
+from identity.models import Applicant, UniversityStaff
 from universities.models import University
 from programs.models import Program, AdmissionCycle
 from admissions.models import Application
@@ -107,6 +107,54 @@ def auth_client(applicant_user):
 def other_auth_client(other_applicant_user):
     client = APIClient()
     token = get_token_for_user(other_applicant_user)
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+    return client
+
+
+@pytest.fixture
+def staff_officer(university):
+    return UniversityStaff.objects.create_user(
+        email='officer@test.edu',
+        full_name='Officer User',
+        password='securepass123',
+        university=university,
+        permission_level='officer',
+    )
+
+
+@pytest.fixture
+def other_university(db):
+    from universities.models import University
+    return University.objects.create(
+        name='Other University',
+        description='A different university',
+        status='active',
+    )
+
+
+@pytest.fixture
+def other_staff_officer(other_university):
+    return UniversityStaff.objects.create_user(
+        email='officer@other.edu',
+        full_name='Other Officer',
+        password='securepass123',
+        university=other_university,
+        permission_level='officer',
+    )
+
+
+@pytest.fixture
+def officer_client(staff_officer):
+    client = APIClient()
+    token = get_token_for_user(staff_officer)
+    client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+    return client
+
+
+@pytest.fixture
+def other_officer_client(other_staff_officer):
+    client = APIClient()
+    token = get_token_for_user(other_staff_officer)
     client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
     return client
 

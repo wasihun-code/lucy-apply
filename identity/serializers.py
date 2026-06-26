@@ -22,6 +22,12 @@ class RegisterSerializer(serializers.ModelSerializer):
         return applicant
 
 
+class StaffInviteSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+    full_name = serializers.CharField(max_length=255)
+    permission_level = serializers.ChoiceField(choices=['officer', 'admin'])
+
+
 class ApplicantSerializer(serializers.ModelSerializer):
     class Meta:
         model = Applicant

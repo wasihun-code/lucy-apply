@@ -23,11 +23,13 @@ from documents.serializers import ApplicationDocumentSerializer
 from payments.models import Payment
 from payments.serializers import PaymentSerializer
 from payments.processor import create_payment_intent, is_mock_mode
+from identity.models import UniversityStaff
 from identity.permissions import (
     IsApplicant, IsEmailVerified, IsUniversityStaff,
     IsScopedToUniversity, IsApplicantOwner,
-    IsApplicantOwnerOrStaffScoped, IsPlatformAdmin,
+    IsApplicantOwnerOrStaffScoped, MFAVerified,
 )
+from notifications.tasks import send_decision_reversed_email
 
 
 class ApplicationViewSet(viewsets.ModelViewSet):
@@ -57,7 +59,8 @@ class ApplicationViewSet(viewsets.ModelViewSet):
             permission_classes = [permissions.IsAuthenticated, IsApplicant]
         elif self.action == 'status_change':
             permission_classes = [
-                permissions.IsAuthenticated, IsPlatformAdmin,
+                permissions.IsAuthenticated, IsUniversityStaff,
+                IsScopedToUniversity, MFAVerified,
             ]
         else:
             permission_classes = [
@@ -348,7 +351,6 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['patch'], url_path='status')
     def status_change(self, request, pk=None):
-        # TODO Sprint 7: replace with Officer review flow
         application = self.get_object()
         new_status = request.data.get('status')
         reason = request.data.get('reason', '')
@@ -359,11 +361,41 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if new_status not in ('admitted', 'rejected', 'waitlisted', 'under_review'):
+            return Response(
+                {'error': {'code': '400', 'message': 'Invalid status for this action'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        is_reversal = (
+            new_status == 'under_review'
+            and application.status in ('admitted', 'rejected', 'waitlisted')
+        )
+
+        if new_status == 'under_review' and not is_reversal:
+            return Response(
+                {'error': {'code': 'NOT_REVERSAL', 'message': 'under_review can only be set as a reversal from a decision state'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if is_reversal:
+            if application.offer_response_at is not None:
+                return Response(
+                    {'error': {'code': 'CANNOT_REVERSE', 'message': 'Cannot reverse — applicant has already responded'}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        staff = UniversityStaff.objects.get(pk=request.user.pk)
+
+        if new_status in ('admitted', 'rejected', 'waitlisted'):
+            application.decision_by = staff
+            application.save(update_fields=['decision_by', 'updated_at'])
+
         try:
             transition_application(
                 application, new_status,
-                actor_type='system',
-                actor_id=request.user.platformadmin.id,
+                actor_type='university_staff',
+                actor_id=str(staff.id),
                 reason=reason,
             )
         except ValidationError as e:
@@ -371,6 +403,9 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 {'error': {'code': 'INVALID_TRANSITION', 'message': str(e)}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if is_reversal:
+            send_decision_reversed_email.delay(str(application.id))
 
         serializer = ApplicationDetailSerializer(application)
         return Response(serializer.data)

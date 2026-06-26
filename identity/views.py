@@ -12,12 +12,26 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import AuthenticationFailed
 
-from .models import Applicant, EmailVerificationToken, PasswordResetToken
+from .models import User, Applicant, EmailVerificationToken, PasswordResetToken, StaffInviteToken
 from .permissions import IsUniversityStaff, IsPlatformAdmin, IsApplicant
 from .serializers import RegisterSerializer, ApplicantSerializer
 
 logger = logging.getLogger(__name__)
+
+
+class CustomTokenObtainPairView(TokenObtainPairView):
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email', '').lower().strip()
+        if email:
+            user = User.objects.filter(email=email).first()
+            if user and user.account_status != 'active':
+                return Response(
+                    {'error': {'code': '401', 'message': 'Account is deactivated'}},
+                    status=status.HTTP_401_UNAUTHORIZED,
+                )
+        return super().post(request, *args, **kwargs)
 
 
 class RegisterView(APIView):
@@ -125,6 +139,35 @@ class ResetPasswordView(APIView):
         applicant.set_password(new_password)
         applicant.save(update_fields=['password'])
         return Response({'detail': 'Password reset successfully'})
+
+
+class SetStaffPasswordView(APIView):
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        token_value = request.data.get('token', '')
+        new_password = request.data.get('new_password', '')
+        if not new_password or len(new_password) < 8:
+            return Response(
+                {'error': {'code': '400', 'message': 'Password must be at least 8 characters'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        token = get_object_or_404(
+            StaffInviteToken,
+            token=token_value,
+            used=False,
+        )
+        if not token.is_valid():
+            return Response(
+                {'error': {'code': '400', 'message': 'Invite token has expired'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        token.used = True
+        token.save(update_fields=['used'])
+        staff = token.university_staff
+        staff.set_password(new_password)
+        staff.save(update_fields=['password'])
+        return Response({'detail': 'Password set successfully. You can now log in.'})
 
 
 class LogoutView(APIView):

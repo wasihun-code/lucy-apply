@@ -19,13 +19,31 @@ class ApplicationCreateSerializer(serializers.ModelSerializer):
 class ApplicationListSerializer(serializers.ModelSerializer):
     program_name = serializers.CharField(source='program.name', read_only=True)
     university_name = serializers.CharField(source='university.name', read_only=True)
+    applicant_name = serializers.CharField(source='applicant.full_name', read_only=True)
+    document_verified_count = serializers.SerializerMethodField()
+    document_total_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Application
         fields = [
             'id', 'program', 'program_name', 'university_name',
-            'admission_cycle', 'status', 'created_at', 'updated_at',
+            'admission_cycle', 'status', 'submitted_at',
+            'applicant', 'applicant_name',
+            'document_verified_count', 'document_total_count',
+            'created_at', 'updated_at',
         ]
+
+    def get_document_verified_count(self, obj):
+        required_types = [d.get('type') for d in obj.program.required_documents]
+        if not required_types:
+            return 0
+        return obj.documents.filter(
+            document_type__in=required_types,
+            status='verified',
+        ).values('document_type').distinct().count()
+
+    def get_document_total_count(self, obj):
+        return len(obj.program.required_documents)
 
 
 class ApplicationDetailSerializer(serializers.ModelSerializer):

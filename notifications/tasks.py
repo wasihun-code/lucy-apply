@@ -62,6 +62,27 @@ def send_offer_response_email(applicant_email, program_name, response, applicati
 
 
 @shared_task
+def send_decision_reversed_email(application_id):
+    from admissions.models import Application
+    try:
+        app = Application.objects.select_related(
+            'applicant', 'program'
+        ).get(pk=application_id)
+    except Application.DoesNotExist:
+        logger.warning('send_decision_reversed_email: application %s not found', application_id)
+        return
+    subject = 'Decision Reversed — Lucy Apply'
+    message = (
+        f'A previous decision on your application to {app.program.name} '
+        f'has been reversed. Your application is back under review.\n'
+        f'Application ID: {application_id}\n'
+        f'Please log in to view the latest status.'
+    )
+    _send_email(subject, message, app.applicant.email)
+    logger.info('Decision reversal email sent to %s for app %s', app.applicant.email, application_id)
+
+
+@shared_task
 def send_document_flagged_email(applicant_email, document_type, program_name, application_id):
     subject = 'Document Flagged — Lucy Apply'
     message = (
