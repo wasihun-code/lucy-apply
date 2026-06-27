@@ -80,7 +80,21 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       }
       setStaff(s)
     })
-  }, [router])
+
+    const token = getToken()
+    if (token) {
+      fetch(`${API_URL}auth/me/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((r) => r.json())
+        .then((me) => {
+          if (me.mfa_enabled && !me.mfa_verified) {
+            router.push('/mfa/verify?redirect=' + encodeURIComponent(pathname))
+          }
+        })
+        .catch(() => {})
+    }
+  }, [router, pathname])
 
   if (!staff) {
     return (
@@ -123,6 +137,21 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           >
             Programs
           </Link>
+          {staff.isAdmin && (
+            <Link
+              href="/portal/team"
+              style={{
+                padding: '0.4rem 0.8rem',
+                background: pathname.startsWith('/portal/team') ? '#0d6efd' : '#e9ecef',
+                color: pathname.startsWith('/portal/team') ? '#fff' : '#333',
+                borderRadius: '4px',
+                textDecoration: 'none',
+                fontSize: '0.85rem',
+              }}
+            >
+              Team
+            </Link>
+          )}
           <Link
             href="/dashboard"
             style={{

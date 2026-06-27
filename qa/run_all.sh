@@ -58,10 +58,10 @@ echo "╔═══════════════════════�
 echo "║  STEP 3: Starting QA server (isolated DB)               ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 
-export QA_PORT="${QA_PORT:-8001}"
-bash qa/run_server.sh
+QA_PORT=$(bash qa/run_server.sh)
 
 # Override BASE_URL for all test scripts to point to QA server
+export QA_PORT
 export BASE_URL="http://localhost:$QA_PORT/api/v1"
 # All test scripts sourcing env.sh use ${BASE_URL:-...} so this takes effect
 

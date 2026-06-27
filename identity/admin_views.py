@@ -8,6 +8,7 @@ from .models import User, Applicant, UniversityStaff, PlatformAdmin
 from .permissions import IsPlatformAdmin, MFAVerified
 
 from universities.models import University
+from universities.serializers import UniversityListSerializer
 from programs.models import Program
 from admissions.models import Application
 
@@ -102,3 +103,19 @@ class AdminUserStatusView(APIView):
         user.account_status = new_status
         user.save(update_fields=['account_status', 'updated_at'])
         return Response({'detail': f'User {new_status}'})
+
+
+class AdminUniversitiesView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsPlatformAdmin, MFAVerified]
+
+    def get(self, request):
+        universities = University.objects.annotate(
+            program_count=Count('program', distinct=True),
+            application_count=Count('application', distinct=True),
+        ).order_by('name')
+        serializer = UniversityListSerializer(universities, many=True)
+        data = serializer.data
+        for i, u in enumerate(universities):
+            data[i]['program_count'] = u.program_count
+            data[i]['application_count'] = u.application_count
+        return Response({'results': data})

@@ -71,9 +71,8 @@ pass "Staff invite audit event recorded for $AUDIT_STAFF_EMAIL"
 
 # ── 3. Staff deactivation ─────────────────────────────────────────
 subheader "Staff deactivation audit event"
-api_call DELETE "$BASE_URL/universities/$UNIVERSITY_ID/staff_remove/" \
-  "{\"staff_id\":\"$STAFF_ID\"}" \
-  "$STAFF_TOKEN"
+api_call DELETE "$BASE_URL/universities/$UNIVERSITY_ID/staff/$STAFF_ID/" \
+  "" "$STAFF_TOKEN"
 assert_status 200 "$API_STATUS" "deactivate staff"
 
 api_call GET "$BASE_URL/universities/$UNIVERSITY_ID/audit-log/?action=staff_deactivated" \

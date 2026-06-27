@@ -163,8 +163,7 @@ class TestAuditLogCreated:
         token = get_token_for_user(staff_admin)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         response = client.delete(
-            f'/api/v1/universities/{university.id}/staff_remove/',
-            {'staff_id': str(target.id)}, format='json',
+            f'/api/v1/universities/{university.id}/staff/{target.id}/',
         )
         assert response.status_code == 200
         entry = AuditLogEntry.objects.filter(

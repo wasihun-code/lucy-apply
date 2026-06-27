@@ -4,6 +4,12 @@ import { useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
+
+function getToken(): string | null {
+  return document.cookie.split('; ').find((c) => c.startsWith('access_token='))?.split('=')[1] ?? null
+}
+
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
@@ -15,35 +21,35 @@ export default function LoginPage() {
     setError('')
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'}auth/login/`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        },
-      )
+      const res = await fetch('/api/auth/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
 
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.detail || 'Login failed')
+        throw new Error(data.error?.message || data.detail || 'Login failed')
       }
 
-      const data = await res.json()
-      document.cookie = `access_token=${data.access}; path=/; max-age=1800; SameSite=Lax`
-      document.cookie = `refresh_token=${data.refresh}; path=/; max-age=86400; SameSite=Lax`
-
-      const meRes = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'}auth/me/`,
-        { headers: { Authorization: `Bearer ${data.access}` } },
-      )
+      const meRes = await fetch(`${API_URL}auth/me/`, {
+        headers: { Authorization: `Bearer ${getToken()}` },
+      })
       if (meRes.ok) {
         const me = await meRes.json()
         if (me.role === 'universitystaff') {
+          if (me.mfa_enabled && !me.mfa_verified) {
+            router.push('/mfa/verify?redirect=/portal')
+            return
+          }
           router.push('/portal')
           return
         }
         if (me.role === 'platformadmin') {
+          if (me.mfa_enabled && !me.mfa_verified) {
+            router.push('/mfa/verify?redirect=/admin/universities')
+            return
+          }
           router.push('/admin/')
           return
         }

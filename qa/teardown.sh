@@ -32,12 +32,15 @@ if [ -f "$SERVER_PID_FILE" ]; then
     rm -f "$SERVER_PID_FILE"
 fi
 
-# Fallback: kill any process on the QA port
-for port in 8001 8002; do
-    FPID=$(lsof -i ":$port" -sTCP:LISTEN -t 2>/dev/null || true)
-    if [ -n "$FPID" ]; then
-        echo "  Cleaning up orphan server on port $port (PID $FPID)..."
-        kill -9 "$FPID" 2>/dev/null || true
+# Fallback: kill any orphan QA server by PID file pattern
+for pidfile in /tmp/lucy_qa_server.pid; do
+    if [ -f "$pidfile" ]; then
+        PID=$(cat "$pidfile")
+        if kill -0 "$PID" 2>/dev/null; then
+            echo "  Cleaning up orphan QA server (PID $PID)..."
+            kill -9 "$PID" 2>/dev/null || true
+        fi
+        rm -f "$pidfile"
     fi
 done
 

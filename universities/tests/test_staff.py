@@ -183,9 +183,7 @@ class TestStaffRemove:
 
     def test_remove_deactivates_staff(self, admin_client, university, target_staff):
         response = admin_client.delete(
-            f'/api/v1/universities/{university.id}/staff_remove/',
-            {'staff_id': str(target_staff.id)},
-            format='json',
+            f'/api/v1/universities/{university.id}/staff/{target_staff.id}/',
         )
         assert response.status_code == status.HTTP_200_OK
         target_staff.refresh_from_db()
@@ -199,15 +197,15 @@ class TestStaffRemove:
             'email': 'target@test.edu',
             'password': 'securepass123',
         }, format='json')
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_missing_staff_id_returns_400(self, admin_client, university):
+    def test_old_url_returns_404(self, admin_client, university):
         response = admin_client.delete(
             f'/api/v1/universities/{university.id}/staff_remove/',
             {},
             format='json',
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_officer_cannot_remove(self, university):
         officer = UniversityStaff.objects.create_user(
@@ -221,8 +219,6 @@ class TestStaffRemove:
         token = get_token_for_user(officer)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         response = client.delete(
-            f'/api/v1/universities/{university.id}/staff_remove/',
-            {'staff_id': str(officer.id)},
-            format='json',
+            f'/api/v1/universities/{university.id}/staff/{officer.id}/',
         )
         assert response.status_code == status.HTTP_403_FORBIDDEN

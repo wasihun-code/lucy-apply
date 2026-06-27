@@ -84,8 +84,7 @@ class MFAVerified(BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-        if not request.session.session_key:
-            return True
+        # Bypass MFA check during tests so pytest don't need session setup.
         from django.conf import settings
         if getattr(settings, 'TESTING', False):
             return True
