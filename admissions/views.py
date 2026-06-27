@@ -62,6 +62,20 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 permissions.IsAuthenticated, IsUniversityStaff,
                 IsScopedToUniversity, MFAVerified,
             ]
+        elif self.action == 'documents':
+            if self.request.method == 'POST':
+                permission_classes = [
+                    permissions.IsAuthenticated, IsApplicant, IsEmailVerified,
+                    IsApplicantOwner,
+                ]
+            else:
+                permission_classes = [
+                    permissions.IsAuthenticated, IsApplicantOwnerOrStaffScoped,
+                ]
+        elif self.action in ('history', 'payment'):
+            permission_classes = [
+                permissions.IsAuthenticated, IsApplicantOwnerOrStaffScoped,
+            ]
         else:
             permission_classes = [
                 permissions.IsAuthenticated, IsApplicant, IsEmailVerified,
@@ -158,6 +172,11 @@ class ApplicationViewSet(viewsets.ModelViewSet):
         object_key = request.data.get('object_key', '')
 
         if uploaded_file:
+            if uploaded_file.size > settings.FILE_UPLOAD_MAX_MEMORY_SIZE:
+                return Response(
+                    {'error': {'code': 'FILE_TOO_LARGE', 'message': f'File exceeds the maximum size of {settings.FILE_UPLOAD_MAX_MEMORY_SIZE // (1024*1024)}MB'}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             doc.file = uploaded_file
         elif object_key:
             doc.object_key = object_key
@@ -304,6 +323,13 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        cycle = application.admission_cycle
+        if cycle.status != 'open':
+            return Response(
+                {'error': {'code': 'CYCLE_CLOSED', 'message': f'Cannot submit — admission cycle is {cycle.status}'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         required_types = [
             d.get('type') for d in application.program.required_documents
         ]
@@ -387,16 +413,13 @@ class ApplicationViewSet(viewsets.ModelViewSet):
 
         staff = UniversityStaff.objects.get(pk=request.user.pk)
 
-        if new_status in ('admitted', 'rejected', 'waitlisted'):
-            application.decision_by = staff
-            application.save(update_fields=['decision_by', 'updated_at'])
-
         try:
             transition_application(
                 application, new_status,
                 actor_type='university_staff',
                 actor_id=str(staff.id),
                 reason=reason,
+                decision_by=staff,
             )
         except ValidationError as e:
             return Response(

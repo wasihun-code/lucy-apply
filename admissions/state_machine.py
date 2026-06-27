@@ -17,7 +17,7 @@ VALID_TRANSITIONS = {
 DECISION_STATES = ['admitted', 'rejected', 'waitlisted']
 
 
-def transition_application(application, new_status, actor_type, actor_id, reason=''):
+def transition_application(application, new_status, actor_type, actor_id, reason='', decision_by=None):
     if new_status not in VALID_TRANSITIONS.get(application.status, []):
         raise ValidationError(
             f"Cannot transition from '{application.status}' to '{new_status}'"
@@ -57,7 +57,8 @@ def transition_application(application, new_status, actor_type, actor_id, reason
 
     if new_status in ('admitted', 'rejected', 'waitlisted') and from_status != new_status:
         application.decision_at = timezone.now()
-        update_fields.append('decision_at')
+        application.decision_by = decision_by
+        update_fields.extend(['decision_at', 'decision_by'])
 
     if new_status == 'under_review' and from_status in ('admitted', 'rejected', 'waitlisted'):
         application.decision_at = None

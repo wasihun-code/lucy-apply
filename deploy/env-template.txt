@@ -1,0 +1,40 @@
+# Lucy Apply — Production Environment Variables
+# Copy this to .env and fill in your values before deploying.
+
+# Django
+SECRET_KEY=<generate with: python -c "import secrets; print(secrets.token_urlsafe(50))">
+DEBUG=False
+ALLOWED_HOSTS=.lucyapply.com,.run.app
+
+# Database (Cloud SQL PostgreSQL)
+DATABASE_URL=postgres://USER:PASSWORD@HOST:5432/lucy_apply
+
+# Redis (Memorystore or Redis Cloud)
+REDIS_URL=redis://HOST:6379/0
+
+# CORS
+CORS_ALLOWED_ORIGINS=https://lucyapply.com,https://www.lucyapply.com
+
+# Stripe
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+
+# reCAPTCHA v2
+RECAPTCHA_SITE_KEY=6Lc...
+RECAPTCHA_SECRET_KEY=6Lc...
+
+# GCS (Google Cloud Storage)
+GS_BUCKET_NAME=lucy-apply-production
+GS_CREDENTIALS=path/to/service-account.json  # or set via GOOGLE_APPLICATION_CREDENTIALS
+
+# Email (SendGrid / SMTP)
+EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+EMAIL_HOST=smtp.sendgrid.net
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=apikey
+EMAIL_HOST_PASSWORD=SG....
+DEFAULT_FROM_EMAIL=noreply@lucyapply.com
+
+# Google Cloud (for Cloud Run)
+PORT=8080

@@ -7,7 +7,7 @@ from rest_framework.routers import DefaultRouter
 
 from lucy_apply.api_router import router
 from payments.views import payment_webhook
-from identity.admin_views import AdminStatsView, AdminUsersView, AdminUserStatusView
+from identity.admin_views import AdminStatsView, AdminUsersView, AdminUserStatusView, AdminUniversitiesView
 from audit.views import AuditLogViewSet
 
 admin_router = DefaultRouter()
@@ -20,6 +20,7 @@ urlpatterns = [
     path('api/v1/admin/stats/', AdminStatsView.as_view(), name='admin-stats'),
     path('api/v1/admin/users/', AdminUsersView.as_view(), name='admin-users'),
     path('api/v1/admin/users/<uuid:pk>/status/', AdminUserStatusView.as_view(), name='admin-user-status'),
+    path('api/v1/admin/universities/', AdminUniversitiesView.as_view(), name='admin-universities'),
     path('api/v1/admin/', include(admin_router.urls)),
     path('api/v1/payments/webhook/', payment_webhook, name='payment-webhook'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

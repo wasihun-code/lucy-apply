@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const publicPaths = ['/', '/universities', '/login', '/register']
+const publicPaths = ['/', '/universities', '/login', '/register', '/mfa']
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === '/') return true
@@ -19,6 +19,12 @@ export function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith('/portal') && !token) {
+    const loginUrl = new URL('/login', request.url)
+    loginUrl.searchParams.set('redirect', pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  if (pathname.startsWith('/admin') && !token) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)

@@ -15,6 +15,57 @@ def get_token_for_user(user):
 
 
 @pytest.mark.django_db
+class TestAdminUniversitiesView:
+    @pytest.fixture
+    def admin_user(self):
+        return PlatformAdmin.objects.create_user(
+            email='admin@platform.com', full_name='Platform Admin',
+            password='securepass123',
+        )
+
+    @pytest.fixture
+    def admin_client(self, admin_user):
+        client = APIClient()
+        token = get_token_for_user(admin_user)
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        return client
+
+    @pytest.fixture
+    def active_university(self):
+        return University.objects.create(name='Active U', status='active')
+
+    def test_returns_universities_with_counts(self, admin_client, active_university):
+        from programs.models import Program
+        Program.objects.create(
+            university=active_university, name='BSc',
+            degree_level='undergraduate', fee_amount=50.00,
+        )
+        response = admin_client.get('/api/v1/admin/universities/')
+        assert response.status_code == status.HTTP_200_OK
+        results = response.data['results']
+        assert len(results) >= 1
+        uni = [u for u in results if u['id'] == str(active_university.id)][0]
+        assert uni['program_count'] >= 1
+        assert 'application_count' in uni
+
+    def test_unauthenticated_returns_401(self):
+        client = APIClient()
+        response = client.get('/api/v1/admin/universities/')
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_non_admin_returns_403(self):
+        applicant = Applicant.objects.create_user(
+            email='app@test.com', full_name='App',
+            password='pass123', country_of_residence='ET',
+        )
+        client = APIClient()
+        token = get_token_for_user(applicant)
+        client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        response = client.get('/api/v1/admin/universities/')
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
 class TestPlatformAdminAllUniversities:
     @pytest.fixture
     def admin_user(self):

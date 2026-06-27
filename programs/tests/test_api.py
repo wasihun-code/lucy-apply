@@ -53,6 +53,13 @@ class TestProgramPublicAPI:
         assert 'open_cycles' in response.data
         assert 'university_name' in response.data
 
+    def test_empty_filter_returns_empty_results(self, published_program):
+        client = APIClient()
+        response = client.get('/api/v1/programs/?degree_level=postgraduate')
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data['count'] == 0
+        assert response.data['results'] == []
+
     def test_program_list_returns_expected_fields(self, published_program):
         client = APIClient()
         response = client.get('/api/v1/programs/')

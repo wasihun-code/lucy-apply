@@ -1,56 +1,30 @@
 # Lucy Apply — Agent Standing Brief
 
-**No implementation code exists yet.** This repo is pure scaffolding: context docs, opencode config, sprint commands. Sprint 1 builds the Django project from scratch. PLAYBOOK.md documents the human's end-to-end workflow — read it once.
+**Status**: Sprint 11 complete (cross-tenant isolation, edge cases, Celery monitoring). QA suite: 36 scripts, all pass. Pytest: 254 tests, all pass.
+Context files in `context/` are the authoritative spec — read before touching that code.
 
 ## How to work
 
-- `/sprintN` (N=1..11) loads sprint scope from `.opencode/commands/`.
-- Always **Plan mode first** (read-only, `opencode.json` plan agent), then **Build mode**.
+- `/sprintN` loads scope from `.opencode/commands/`.
+- **Plan mode first** (`opencode.json` plan agent), then **Build mode**.
 - Run `@review` after each sprint (tenant-scoping, permissions, state machine).
 - Run `@security-check` before payment/auth/document PRs.
-- Context files in `/context/` are the authoritative spec for each area — read before touching that code.
-
-## Locked stack
-
-| Layer | Choice |
-|---|---|
-| Backend | Django 5.x + Django REST Framework |
-| Frontend | Next.js 14+ (App Router) |
-| Database | PostgreSQL 15+ via Django ORM |
-| Background jobs | Celery + Redis (Cloud Memorystore) |
-| Object storage | GCS via django-storages |
-| Auth | simplejwt + django-otp (MFA) |
-| Hosting | Cloud Run + Cloud SQL |
-| CI/CD | GitHub Actions |
-| Tenant isolation | Shared DB + university_id + RLS |
-
-Do not suggest alternatives. These are locked.
-
-## Django apps
-
-```
-lucy_apply/
-  identity/       ← User models (Applicant, UniversityStaff, PlatformAdmin)
-  universities/   ← University model
-  programs/       ← Program, AdmissionCycle
-  admissions/     ← Application, ApplicationStatusHistory
-  documents/      ← ApplicationDocument
-  payments/       ← Payment model
-  notifications/  ← Celery tasks only (no persistent models for MVP)
-  audit/          ← AuditLogEntry
-```
 
 ## Multi-tenancy (non-negotiable)
 
-1. Tenant-scoped models use `TenantScopedModel` abstract base (adds `university` FK) — never add manually.
-2. `TenantManager` is the **default** manager — auto-filters by `request.user.university_id`.
+1. Tenant-scoped models use `TenantScopedModel` abstract base (adds `university` FK).
+2. `TenantManager` is the **default** manager — auto-filters by `request.user.universitystaff.university_id` via `CurrentRequestMiddleware` + threadlocal. Never call `.all()` unscoped on tenant models outside system tasks or PlatformAdmin views.
 3. `IsScopedToUniversity` permission class on every UniversityStaff ViewSet.
-4. RLS policies via `RunSQL` migrations as third layer. Platform Admin bypasses via separate DB role.
-5. **Cross-tenant data leaks are the #1 severity bug.** When in doubt, add the scope check.
+4. RLS policies via `RunSQL` migrations as third layer.
+5. **Cross-tenant data leaks are the #1 severity bug.**
 
-## Role model
+## Role model & auth
 
-Four mutually-exclusive roles: `Applicant` (global, own data), `UniversityStaff Officer/Admin` (tenant-scoped), `PlatformAdmin` (cross-tenant). MFA required for staff and admin.
+Four mutually-exclusive roles: `Applicant` (global, own data), `UniversityStaff Officer/Admin` (tenant-scoped), `PlatformAdmin` (cross-tenant). MFA required for staff/admin.
+
+JWT dual-mode: Bearer header **or** httpOnly cookies (`access_token`, `refresh_token`). Next.js API route at `/api/auth/login/` proxies Django login and sets cookies. NEVER store tokens in localStorage.
+
+Deactivated accounts return HTTP 403 with generic "Invalid credentials" (no info leak).
 
 ## Application state machine
 
@@ -66,20 +40,79 @@ Immutable: `accepted` and `declined`. All transitions go through `transition_app
 
 ## API conventions
 
-- Base path: `/api/v1/`, DRF ViewSets + DefaultRouter, `@action` for non-CRUD actions.
+- Base path: `/api/v1/`, DRF ViewSets + DefaultRouter, `@action` for non-CRUD.
 - Pagination: `PageNumberPagination`, `page_size=20`, max 100.
-- Filtering: `django-filter` `DjangoFilterBackend`.
 - Errors: custom handler → `{"error": {"code": "...", "message": "..."}}`.
-- `/payments/webhook/`: `@csrf_exempt` + signature verification **only** — never JWT auth.
+- `/payments/webhook/`: `@csrf_exempt` + signature verification only — never JWT auth.
 - Fee amount from `program.fee_amount` (server-side) — never from request body.
 
 ## Audit & lifecycle
 
-- AuditLogEntry via Django signals, not inline in views.
-- Never hard-delete: Submitted applications, payments, documents (versioned), audit logs.
+- `AuditLogEntry` via Django signals, not inline in views.
+- Never hard-delete: submitted applications, payments, documents (versioned), audit logs.
 - Users/staff: soft-delete via `account_status='deactivated'`.
 - Each application pays exactly one fee (`Payment.application` is `OneToOneField`).
-- Deadline check at `payment.initiated_at`, not `completed_at` (ADR-009).
+- Deadline check at `payment.initiated_at`, not `completed_at`.
+
+## MFA (Sprint 10)
+
+- `MFASetupView`: idempotent (returns existing device config on repeat call).
+- `MFAVerifyView`: max 5 attempts, then 5-min session lockout. Returns `remaining_attempts` in error.
+- `AuthMeView` exposes `mfa_enabled` and `mfa_verified` for staff/admin only.
+- `MFAVerified` permission: `TESTING` guard bypasses for pytest; staff/admin must have `request.session['mfa_verified'] == True`.
+
+## Rate limiting (Sprint 10)
+
+4 custom DRF throttle classes in `identity/throttles.py`:
+- `LoginRateThrottle` — email-keyed, 5/hour
+- `RegisterRateThrottle` — IP-keyed, 5/hour
+- `PasswordResetRateThrottle` — email-keyed, 3/hour
+- `MFARateThrottle` — user PK/IP, 10/hour
+
+Configured in `settings.py` `DEFAULT_THROTTLE_RATES`. Applied to auth views.
+
+## Security (Sprint 10)
+
+- **Email enumeration fix**: `ForgotPasswordView`, `ResendVerificationView`, `VerifyEmailView` use `.filter().first()` instead of `get_object_or_404()`, return generic messages regardless of email existence.
+- **File validation**: `documents/validation.py` — python-magic MIME validation (PDF, JPEG, PNG, TIFF, DOC/DOCX). Fails closed on `ImportError` (returns `False`).
+- **GCS signed URLs**: `documents/utils.py` `generate_upload_url()` returns `None` in dev/test.
+- **reCAPTCHA v2**: `payments/captcha.py` — enforces `score >= 0.5` threshold, passes `remoteip`.
+- **Tokens**: Never log plaintext token values.
+
+## Testing
+
+### pytest
+```bash
+venv/bin/python -m pytest              # 254 tests, in-memory SQLite
+venv/bin/python -m pytest path/to/test  # single test file
+```
+- Uses `OPENSE_TESTING=true` (set in root `conftest.py`) to enable `TESTING` flag in settings.
+- `TESTING=True` controls: Celery eager mode, Stripe validation bypass, MFA bypass.
+- Never touches `db.sqlite3` (in-memory DB).
+
+### QA regression (shell scripts against isolated server)
+```bash
+bash qa/run_all.sh                      # full suite (36 scripts, all pass)
+bash qa/teardown.sh                     # cleanup if needed
+```
+- Uses `settings_qa.py` → `qa_db.sqlite3`. Never touches dev DB.
+- Port: auto-selected 8001–8010 via `ss -tln`. Set `QA_PORT` to override.
+- `run_all.sh` sets `BASE_URL` and `DJANGO_SETTINGS_MODULE` for all child scripts.
+- Seed creds: `admin@lucyapply.com/adminpass123!` (PlatformAdmin), `staffadmin@univ.com/staffpass123!` (staff admin), `alice@test.com/testpass123!` (applicant).
+
+### Dev workflow
+```bash
+venv/bin/python manage.py runserver     # dev server on db.sqlite3
+bash qa/auth/01_register.sh             # against dev server
+```
+
+## CI
+
+GitHub Actions (`.github/workflows/ci.yml`): runs `python manage.py check` then `pytest --tb=short` against PostgreSQL 15 + Redis 7. No lint/typecheck stage.
+
+## Docker
+
+`docker-compose.yml`: 6 services — `db` (postgres:15), `redis` (redis:7-alpine), `backend` (gunicorn on 8080), `celery-worker`, `celery-beat`, `frontend` (Next.js on 3000). Stripe env vars required. `libmagic1` installed in `Dockerfile.backend` for python-magic.
 
 ## Context files (read before writing that area)
 
@@ -92,31 +125,10 @@ Immutable: `accepted` and `declined`. All transitions go through `transition_app
 | `context/STATE_MACHINES.md` | Status transitions |
 | `context/SECURITY.md` | Auth/payment/document code |
 
-## Database Isolation (non-negotiable)
+## Misc
 
-The QA regression suite and pytest **must never** touch the development database (`db.sqlite3`).
-
-### QA Suite (`qa/run_all.sh`)
-- Uses `lucy_apply/settings_qa.py` which sets `DATABASES` to `qa_db.sqlite3`
-- `run_all.sh` orchestrates: setup_db → seed data → start server (port 8001) → run tests → teardown
-- `DJANGO_SETTINGS_MODULE=lucy_apply.settings_qa` is exported so all child shells use the QA DB
-- The QA database is deleted on teardown — each run starts fresh
-- Individual test scripts (run directly, not via `run_all.sh`) use the dev server/dev DB as before
-
-### pytest
-- Uses Django's built-in test runner with an in-memory SQLite database
-- Never touches `db.sqlite3` — verified by unchanged timestamp before/after runs
-- 179 tests all pass in isolation
-
-### Running
-```bash
-# Full isolated QA regression (creates/starts/tests/cleans up)
-bash qa/run_all.sh
-
-# pytest (always isolated via in-memory DB)
-venv/bin/python -m pytest
-
-# Dev workflow (runs against dev DB — for individual script debugging)
-# 1. Start dev server:  venv/bin/python manage.py runserver
-# 2. Run a script:      bash qa/auth/01_register.sh
-```
+- Python 3.12.10 (`.python-version`), Django 6.0.6, DRF 3.17.1, Next.js ~14.2.
+- No lint, typecheck, or formatter configured in CI.
+- Celery beat auto-transitions admission cycles hourly (`programs.tasks.auto_transition_cycles`).
+- Frontend has no TypeScript compilation step in CI — `npx tsc --noEmit` to check manually.
+- QA `run_all.sh` auto-detects free ports with `ss -tln` (not `lsof`).

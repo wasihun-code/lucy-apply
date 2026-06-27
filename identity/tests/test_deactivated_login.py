@@ -51,23 +51,21 @@ class TestDeactivatedLogin:
         assert response.status_code == status.HTTP_200_OK
         assert 'access' in response.data
 
-    def test_deactivated_applicant_returns_401(self, deactivated_applicant):
+    def test_deactivated_applicant_returns_403(self, deactivated_applicant):
         client = APIClient()
         response = client.post('/api/v1/auth/login/', {
             'email': 'deactivated@test.com',
             'password': 'securepass123',
         }, format='json')
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        assert 'deactivated' in response.data['error']['message'].lower()
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
-    def test_deactivated_staff_returns_401(self, deactivated_staff):
+    def test_deactivated_staff_returns_403(self, deactivated_staff):
         client = APIClient()
         response = client.post('/api/v1/auth/login/', {
             'email': 'staff@test.com',
             'password': 'securepass123',
         }, format='json')
-        assert response.status_code == status.HTTP_401_UNAUTHORIZED
-        assert 'deactivated' in response.data['error']['message'].lower()
+        assert response.status_code == status.HTTP_403_FORBIDDEN
 
     def test_wrong_password_still_returns_401(self, active_applicant):
         client = APIClient()

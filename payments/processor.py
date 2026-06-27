@@ -15,8 +15,7 @@ def _stripe_available():
 
 
 def is_mock_mode():
-    import os
-    if os.environ.get('OPENSE_TESTING') == 'true':
+    if getattr(settings, 'TESTING', False):
         return True
     if not settings.STRIPE_SECRET_KEY:
         return True

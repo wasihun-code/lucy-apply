@@ -214,16 +214,9 @@ class UniversityViewSet(viewsets.ModelViewSet):
             'permission_level': staff.permission_level,
         }, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['delete'])
-    def staff_remove(self, request, pk=None):
+    @action(detail=True, methods=['delete'], url_path='staff/(?P<staff_id>[^/.]+)')
+    def staff_remove(self, request, pk=None, staff_id=None):
         university = self.get_object()
-        staff_id = request.data.get('staff_id')
-        if not staff_id:
-            return Response(
-                {'error': {'code': '400', 'message': 'staff_id is required'}},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
         staff = get_object_or_404(UniversityStaff, id=staff_id, university=university)
         if staff.account_status == 'deactivated':
             return Response(

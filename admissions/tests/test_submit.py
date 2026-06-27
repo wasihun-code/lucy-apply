@@ -1,4 +1,10 @@
+from datetime import timedelta
+from django.utils import timezone
 from rest_framework import status
+
+from admissions.models import Application
+from payments.models import Payment
+from documents.models import ApplicationDocument
 
 
 class TestSubmitApplication:
@@ -32,3 +38,39 @@ class TestSubmitApplication:
         app.refresh_from_db()
         assert app.status == 'submitted'
         assert app.submitted_at is not None
+
+
+class TestSubmitClosedCycle:
+    def test_closed_cycle_blocks_submit_with_machine_readable_code(
+        self, auth_client, applicant_user, program, admission_cycle,
+    ):
+        admission_cycle.status = 'closed'
+        admission_cycle.close_date = timezone.now()
+        admission_cycle.save(update_fields=['status', 'close_date'])
+
+        app = Application.objects.create(
+            applicant=applicant_user,
+            program=program,
+            admission_cycle=admission_cycle,
+            university=program.university,
+            form_data={'full_name': 'Test'},
+        )
+        for req in program.required_documents:
+            ApplicationDocument.objects.create(
+                application=app, document_type=req['type'],
+                university=app.university, status='pending', version=1,
+            )
+        Payment.objects.create(
+            university=app.university, application=app,
+            amount=program.fee_amount, currency='USD',
+            processor_reference='secret_mock_closed',
+            status='pending', initiated_at=timezone.now(),
+        )
+
+        response = auth_client.post(
+            f'/api/v1/applications/{app.id}/submit/',
+            format='json',
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data['error']['code'] == 'CYCLE_CLOSED'
+        assert 'cycle' in response.data['error']['message'].lower()

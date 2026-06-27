@@ -1,0 +1,32 @@
+# Lucy Apply — Frontend Cloud Run service definition
+# Deploy: gcloud run deploy lucy-apply-frontend --region=us-central1 --source=./frontend
+# Or use cloudbuild.yaml for CI/CD.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: lucy-apply-frontend
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: '5'
+        run.googleapis.com/cpu-throttling: 'false'
+        run.googleapis.com/execution-environment: gen1
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 60
+      containers:
+        - image: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/frontend:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: NEXT_PUBLIC_API_URL
+              value: 'https://api.lucyapply.com/api/v1'
+          resources:
+            limits:
+              cpu: '1'
+              memory: 256Mi

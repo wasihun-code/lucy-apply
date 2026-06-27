@@ -1,3 +1,4 @@
+from django.utils import timezone
 from rest_framework import status
 
 
@@ -50,6 +51,39 @@ class TestPaymentIntent:
             format='json',
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+class TestPaymentFailure:
+    def test_payment_failure_stays_draft(self, auth_client, application_with_docs):
+        from payments.models import Payment
+        from admissions.models import Application
+
+        app = application_with_docs
+        payment = Payment.objects.create(
+            university=app.university,
+            application=app,
+            amount=app.program.fee_amount,
+            currency='USD',
+            processor_reference='secret_mock_fail_test',
+            status='pending',
+            initiated_at=timezone.now(),
+        )
+
+        payment.status = 'failed'
+        payment.save(update_fields=['status', 'updated_at'])
+
+        app.refresh_from_db()
+        assert app.status == 'draft'
+        assert payment.status == 'failed'
+
+    def test_payment_abandoned_keeps_draft(self, auth_client, application_with_docs):
+        app = application_with_docs
+        response = auth_client.get(
+            f'/api/v1/applications/{app.id}/payment/'
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        app.refresh_from_db()
+        assert app.status == 'draft'
 
 
 class TestPaymentRetrieve:

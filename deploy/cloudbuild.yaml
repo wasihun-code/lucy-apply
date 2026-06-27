@@ -1,0 +1,89 @@
+# Lucy Apply — Google Cloud Build config
+# Trigger: push to main branch
+# Builds both images, pushes to Artifact Registry, deploys to Cloud Run.
+
+steps:
+
+  # ── Backend image ──
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/backend:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/backend:latest'
+      - '-f'
+      - 'Dockerfile.backend'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/backend:${SHORT_SHA}'
+
+  # ── Frontend image ──
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - build
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/frontend:${SHORT_SHA}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/frontend:latest'
+      - '-f'
+      - 'Dockerfile.frontend'
+      - '.'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - push
+      - '${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/frontend:${SHORT_SHA}'
+
+  # ── Deploy backend to Cloud Run ──
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - lucy-apply-backend
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/backend:${SHORT_SHA}'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--concurrency=80'
+      - '--cpu=1'
+      - '--memory=512Mi'
+      - '--timeout=300'
+      - '--set-secrets=SECRET_KEY=SECRET_KEY:latest,DATABASE_URL=DATABASE_URL:latest'
+      - '--set-env-vars=DEBUG=False,ALLOWED_HOSTS=.lucyapply.com,.run.app'
+      - '--add-cloudsql-instances=${PROJECT_ID}:${_REGION}:lucy-apply-db'
+      - '--vpc-connector=lucy-apply-vpc-connector'
+      - '--service-account=cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com'
+
+  # ── Deploy frontend to Cloud Run ──
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - lucy-apply-frontend
+      - '--image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/frontend:${SHORT_SHA}'
+      - '--region=${_REGION}'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--min-instances=0'
+      - '--max-instances=5'
+      - '--cpu=1'
+      - '--memory=256Mi'
+      - '--timeout=60'
+      - '--set-env-vars=NEXT_PUBLIC_API_URL=https://api.lucyapply.com/api/v1'
+
+substitutions:
+  _REGION: us-central1
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1800s

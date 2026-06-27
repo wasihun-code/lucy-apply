@@ -1,0 +1,65 @@
+# Lucy Apply — Backend Cloud Run service definition
+# Deploy: gcloud run deploy lucy-apply-backend --region=us-central1 --source=.
+# Or use cloudbuild.yaml for CI/CD.
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: lucy-apply-backend
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: '0'
+        autoscaling.knative.dev/maxScale: '10'
+        run.googleapis.com/cpu-throttling: 'false'
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/vpc-access-connector: lucy-apply-vpc-connector
+        run.googleapis.com/cloudsql-instances: ${PROJECT_ID}:us-central1:lucy-apply-db
+        run.googleapis.com/secrets: SECRET_KEY=SECRET_KEY:latest,DATABASE_URL=DATABASE_URL:latest
+    spec:
+      serviceAccountName: cloud-run-sa@${PROJECT_ID}.iam.gserviceaccount.com
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: ${_REGION}-docker.pkg.dev/${PROJECT_ID}/lucy-apply/backend:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DEBUG
+              value: 'False'
+            - name: ALLOWED_HOSTS
+              value: '.lucyapply.com,.run.app'
+            - name: CORS_ALLOWED_ORIGINS
+              value: 'https://lucyapply.com,https://www.lucyapply.com'
+            - name: DJANGO_SETTINGS_MODULE
+              value: lucy_apply.settings
+            - name: GS_BUCKET_NAME
+              value: lucy-apply-production
+            - name: EMAIL_BACKEND
+              value: django.core.mail.backends.smtp.EmailBackend
+          resources:
+            limits:
+              cpu: '1'
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /api/v1/universities/
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/v1/universities/
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/v1/universities/
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 15

@@ -67,6 +67,26 @@ class TestUpdateDraftApplication:
         }, format='json')
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    def test_concurrent_edit_last_write_wins(self, auth_client, application):
+        from rest_framework.test import APIClient
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(application.applicant).access_token)
+        tab2 = APIClient()
+        tab2.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+        tab2.patch(f'/api/v1/applications/{application.id}/', {
+            'form_data': {'field_a': 'from_tab2'},
+        }, format='json')
+
+        response = auth_client.patch(f'/api/v1/applications/{application.id}/', {
+            'form_data': {'field_b': 'from_tab1'},
+        }, format='json')
+
+        assert response.status_code == status.HTTP_200_OK
+        application.refresh_from_db()
+        assert application.form_data['field_a'] == 'from_tab2'
+        assert application.form_data['field_b'] == 'from_tab1'
+
 
 class TestDeleteDraftApplication:
     def test_delete_draft(self, auth_client, application):
