@@ -11,7 +11,6 @@ import { Menu, X, LogOut } from 'lucide-react'
 const navItems = [
   { href: '/dashboard', label: 'My Applications' },
   { href: '/universities', label: 'Browse Programs' },
-  { href: '/dashboard/profile', label: 'Profile' },
 ]
 
 export function ApplicantShell({ children }: { children: React.ReactNode }) {

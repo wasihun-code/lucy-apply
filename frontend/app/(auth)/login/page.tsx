@@ -16,15 +16,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checkedAuth, setCheckedAuth] = useState(false)
 
   useEffect(() => {
+    if (checkedAuth) return
+    setCheckedAuth(true)
     getMe().then((me) => {
       if (!me) return
       if (me.role === 'universitystaff') router.replace('/portal/applications')
       else if (me.role === 'platformadmin') router.replace('/admin/universities')
       else router.replace('/dashboard')
     })
-  }, [router])
+  }, [router, checkedAuth])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -36,6 +39,7 @@ export default function LoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
+        credentials: 'include',
       })
 
       if (!res.ok) {
@@ -43,12 +47,16 @@ export default function LoginPage() {
         throw new Error(data.error?.message || data.detail || 'Login failed')
       }
 
-      await res.json()
+      const loginData = await res.json()
 
-      const meRes = await fetch('/api/auth/me/')
+      const meRes = await fetch('/api/auth/me/', {
+        headers: { Authorization: `Bearer ${loginData.access}` },
+      })
 
       if (!meRes.ok) {
-        throw new Error('Failed to verify identity after login')
+        const meErr = await meRes.json().catch(() => null)
+        const msg = meErr?.error?.message || meErr?.detail || `Backend returned ${meRes.status}`
+        throw new Error(msg)
       }
 
       const me = await meRes.json()
