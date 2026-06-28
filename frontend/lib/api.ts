@@ -27,6 +27,7 @@ export interface University {
   id: string
   name: string
   description: string
+  accreditation_info?: string
   logo: string | null
   status: string
   created_at: string

@@ -21,7 +21,7 @@ const statusConfig: Record<Status, { label: string; className: string }> = {
   archived:    { label: 'Archived',    className: 'bg-neutral/10 text-neutral border-neutral/20' },
 }
 
-export function StatusBadge({ status }: { status: string }) {
+export function StatusBadge({ status, label }: { status: string; label?: string }) {
   const config = statusConfig[status as Status] ?? {
     label: status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
     className: 'bg-neutral/10 text-neutral border-neutral/20',
@@ -34,7 +34,7 @@ export function StatusBadge({ status }: { status: string }) {
         config.className,
       )}
     >
-      {config.label}
+      {label ?? config.label}
     </span>
   )
 }

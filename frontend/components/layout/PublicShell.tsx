@@ -30,6 +30,12 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
             >
               Universities
             </Link>
+            <Link
+              href="/programs"
+              className="text-sm font-medium text-text-600 hover:text-text-900 transition-colors"
+            >
+              Programs
+            </Link>
             {!user ? (
               <div className="flex items-center gap-2">
                 <Link href="/login">
