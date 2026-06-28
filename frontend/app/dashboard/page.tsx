@@ -3,9 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { getMe } from '@/lib/auth'
 import type { Application, PaginatedResponse } from '@/lib/api'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -14,25 +13,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1]
-
-    if (!token) {
-      router.push('/login')
-      return
-    }
-
     async function loadData() {
       try {
+        const me = await getMe()
+        if (!me) {
+          router.push('/login')
+          return
+        }
+
         const [profileRes, appsRes] = await Promise.all([
-          fetch(`${API_URL}applicants/me/`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
-          fetch(`${API_URL}applications/`, {
-            headers: { Authorization: `Bearer ${token}` },
-          }),
+          fetch('/api/proxy/applicants/me/'),
+          fetch('/api/proxy/applications/'),
         ])
 
         if (!profileRes.ok) throw new Error('Unauthorized')

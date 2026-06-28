@@ -3,12 +3,6 @@
 import { Suspense, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  return document.cookie.split('; ').find((c) => c.startsWith('access_token='))?.split('=')[1] ?? null
-}
-
 function MFAVerifyForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -20,33 +14,31 @@ function MFAVerifyForm() {
     e.preventDefault()
     setError('')
     setLoading(true)
-    const token = getToken()
-    if (!token) { router.push('/login'); return }
 
     try {
-      const res = await fetch(`${API_URL}auth/mfa/verify/`, {
+      const res = await fetch('/api/proxy/auth/mfa/verify/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }),
       })
       const data = await res.json()
       if (res.ok) {
-        const redirect = searchParams.get('redirect') || '/admin/universities'
+        const redirect = searchParams.get('redirect') || '/dashboard'
         router.push(redirect)
       } else {
         setError(data.error?.message || 'Invalid code')
       }
     } catch {
-      setError('Verification failed')
+      setError('Failed to verify code')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div style={{ maxWidth: '400px', margin: '4rem auto' }}>
-      <h1 style={{ marginBottom: '1.5rem' }}>Two-Factor Authentication</h1>
-      <p style={{ marginBottom: '1rem', color: '#555' }}>
+    <div style={{ maxWidth: '400px', margin: '4rem auto', textAlign: 'center' }}>
+      <h1 style={{ marginBottom: '1rem' }}>Two-Factor Authentication</h1>
+      <p style={{ color: '#555', marginBottom: '1.5rem' }}>
         Enter the 6-digit code from your authenticator app.
       </p>
 
@@ -64,7 +56,6 @@ function MFAVerifyForm() {
           placeholder="000000"
           required
           maxLength={6}
-          disabled={loading}
           style={{
             width: '100%', padding: '0.75rem', fontSize: '1.5rem', textAlign: 'center',
             letterSpacing: '0.5rem', border: '1px solid #d1d5db', borderRadius: '4px',
@@ -75,8 +66,9 @@ function MFAVerifyForm() {
           type="submit"
           disabled={loading}
           style={{
-            width: '100%', padding: '0.75rem', background: loading ? '#93a3c4' : '#2563eb', color: '#fff',
-            border: 'none', borderRadius: '4px', fontSize: '1rem', fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
+            width: '100%', padding: '0.75rem', background: loading ? '#94a3b8' : '#2563eb',
+            color: '#fff', border: 'none', borderRadius: '4px', fontSize: '1rem',
+            fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
           {loading ? 'Verifying...' : 'Verify'}
@@ -88,7 +80,7 @@ function MFAVerifyForm() {
 
 export default function MFAVerifyPage() {
   return (
-    <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>}>
+    <Suspense fallback={<div style={{ padding: '4rem', textAlign: 'center' }}>Loading...</div>}>
       <MFAVerifyForm />
     </Suspense>
   )

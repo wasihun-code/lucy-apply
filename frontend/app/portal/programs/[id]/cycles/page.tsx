@@ -3,38 +3,7 @@
 import { useCallback, useEffect, useState, FormEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return (
-    document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1] ?? null
-  )
-}
-
-async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const base = API_URL.replace(/\/$/, '')
-  const url = `${base}/${path.replace(/^\//, '')}`
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
-    throw new Error(msg)
-  }
-  return res.json()
-}
+import { getMe } from '@/lib/auth'
 
 interface Cycle {
   id: string
@@ -70,14 +39,18 @@ export default function CyclesPage() {
   const loadData = useCallback(async () => {
     if (!programId) return
     try {
-      const m = await authFetch<MeResponse>('auth/me/')
-      setMe(m)
+      const m = await getMe()
+      if (!m) { router.push('/portal/programs'); return }
+      setMe(m as MeResponse)
       if (m.role !== 'universitystaff') { router.push('/portal/programs'); return }
 
-      const [prog, cyc] = await Promise.all([
-        authFetch<{ name: string }>(`programs/${programId}/`),
-        authFetch<Cycle[]>(`programs/${programId}/cycles/`),
+      const [progRes, cycRes] = await Promise.all([
+        fetch(`/api/proxy/programs/${programId}/`),
+        fetch(`/api/proxy/programs/${programId}/cycles/`),
       ])
+      if (!progRes.ok || !cycRes.ok) throw new Error('Failed to load')
+      const prog = await progRes.json() as { name: string }
+      const cyc = await cycRes.json() as Cycle[]
       setProgramName(prog.name)
       setCycles(Array.isArray(cyc) ? cyc : (cyc as unknown as { results: Cycle[] }).results || [])
     } catch {
@@ -96,14 +69,19 @@ export default function CyclesPage() {
     setError(null)
 
     try {
-      await authFetch(`programs/${programId}/cycles/`, {
+      const res = await fetch(`/api/proxy/programs/${programId}/cycles/`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newName,
           open_date: newOpenDate,
           close_date: newCloseDate,
         }),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `HTTP ${res.status}`)
+      }
       setShowNewForm(false)
       setNewName('')
       setNewOpenDate('')
@@ -120,7 +98,11 @@ export default function CyclesPage() {
   async function handleClose(cycleId: string) {
     if (!confirm('Close this cycle? New applications will be blocked.')) return
     try {
-      await authFetch(`admission-cycles/${cycleId}/close/`, { method: 'PATCH' })
+      const res = await fetch(`/api/proxy/admission-cycles/${cycleId}/close/`, { method: 'PATCH' })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `HTTP ${res.status}`)
+      }
       setSuccess('Cycle closed.')
       await loadData()
     } catch (e) {
@@ -131,7 +113,11 @@ export default function CyclesPage() {
   async function handleArchive(cycleId: string) {
     if (!confirm('Archive this cycle? This action cannot be undone.')) return
     try {
-      await authFetch(`admission-cycles/${cycleId}/archive/`, { method: 'PATCH' })
+      const res = await fetch(`/api/proxy/admission-cycles/${cycleId}/archive/`, { method: 'PATCH' })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `HTTP ${res.status}`)
+      }
       setSuccess('Cycle archived.')
       await loadData()
     } catch (e) {

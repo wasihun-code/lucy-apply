@@ -11,14 +11,14 @@ import { LogOut, Menu, ChevronLeft } from 'lucide-react'
 type NavItem = {
   href: string
   label: string
-  roles: ('officer' | 'admin' | 'platform_admin')[]
+  roles: ('officer' | 'admin' | 'platformadmin')[]
 }
 
 const platformAdminNav: NavItem[] = [
-  { href: '/admin/universities', label: 'Universities', roles: ['platform_admin'] },
-  { href: '/admin/users', label: 'Users', roles: ['platform_admin'] },
-  { href: '/admin/stats', label: 'Stats', roles: ['platform_admin'] },
-  { href: '/admin/audit-log', label: 'Audit Log', roles: ['platform_admin'] },
+  { href: '/admin/universities', label: 'Universities', roles: ['platformadmin'] },
+  { href: '/admin/users', label: 'Users', roles: ['platformadmin'] },
+  { href: '/admin/stats', label: 'Stats', roles: ['platformadmin'] },
+  { href: '/admin/audit-log', label: 'Audit Log', roles: ['platformadmin'] },
 ]
 
 const staffNav: NavItem[] = [
@@ -28,7 +28,7 @@ const staffNav: NavItem[] = [
 ]
 
 function getNavItems(role: string, permissionLevel?: string): NavItem[] {
-  if (role === 'platform_admin') return platformAdminNav
+  if (role === 'platformadmin') return platformAdminNav
 
   const level = permissionLevel || 'officer'
   return staffNav.filter((item) =>
@@ -89,7 +89,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between">
           <div className={cn('min-w-0', collapsed && 'hidden')}>
             <p className="text-xs font-medium text-text-400 uppercase tracking-wider">
-              {user.role === 'platform_admin' ? 'Platform Admin' : (user.university_name || 'Staff Portal')}
+              {user.role === 'platformadmin' ? 'Platform Admin' : (user.university_name || 'Staff Portal')}
             </p>
           </div>
         </div>
@@ -190,7 +190,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
           <Menu size={20} />
         </button>
         <span className="ml-3 font-display font-bold text-text-900">
-          {user.role === 'platform_admin' ? 'Admin Panel' : (user.university_name || 'Staff Portal')}
+          {user.role === 'platformadmin' ? 'Admin Panel' : (user.university_name || 'Staff Portal')}
         </span>
       </div>
 

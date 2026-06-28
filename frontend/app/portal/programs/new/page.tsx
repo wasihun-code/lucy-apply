@@ -3,38 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return (
-    document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1] ?? null
-  )
-}
-
-async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const base = API_URL.replace(/\/$/, '')
-  const url = `${base}/${path.replace(/^\//, '')}`
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
-    throw new Error(msg)
-  }
-  return res.json()
-}
+import { getMe } from '@/lib/auth'
 
 export default function NewProgramPage() {
   const router = useRouter()
@@ -49,13 +18,13 @@ export default function NewProgramPage() {
   const [feeCurrency, setFeeCurrency] = useState('USD')
 
   useEffect(() => {
-    authFetch<{ role: string; university?: string; permission_level?: string }>('auth/me/').then((m) => {
-      if (m.role !== 'universitystaff' || m.permission_level !== 'admin' || !m.university) {
+    getMe().then((m) => {
+      if (!m || m.role !== 'universitystaff' || m.permission_level !== 'admin' || !m.university) {
         router.push('/portal/programs')
         return
       }
       setUniversityId(m.university!)
-    }).catch(() => router.push('/portal/programs'))
+    })
   }, [router])
 
   async function handleSubmit(e: FormEvent) {
@@ -65,8 +34,9 @@ export default function NewProgramPage() {
     setError(null)
 
     try {
-      await authFetch(`universities/${universityId}/programs/`, {
+      const res = await fetch(`/api/proxy/universities/${universityId}/programs/`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           degree_level: degreeLevel,
@@ -76,6 +46,11 @@ export default function NewProgramPage() {
           required_documents: [],
         }),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+        throw new Error(msg)
+      }
       router.push('/portal/programs')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create program')

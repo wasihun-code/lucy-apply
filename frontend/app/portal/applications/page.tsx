@@ -3,40 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { getMe } from '@/lib/auth'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return (
-    document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1] ?? null
-  )
-}
-
-async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const base = API_URL.replace(/\/$/, '')
-  const url = `${base}/${path.replace(/^\//, '')}`
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
-    throw new Error(msg)
-  }
-  return res.json()
-}
-
-interface ApplicationItem {
+export interface ApplicationItem {
   id: string
   applicant: string
   applicant_name: string
@@ -48,7 +17,7 @@ interface ApplicationItem {
   document_total_count: number
 }
 
-interface ProgramItem {
+export interface ProgramItem {
   id: string
   name: string
 }
@@ -87,27 +56,28 @@ export default function ApplicationsPage() {
     if (statusFilter) params.set('status', statusFilter)
     if (programFilter) params.set('program', programFilter)
     setLoading(true)
-    authFetch<{ results: ApplicationItem[] }>(
-      `universities/${me.university}/applications/?${params.toString()}`
-    ).then((data) => {
-      setApps(data.results || [])
-    }).catch(() => {
-      setApps([])
-    }).finally(() => setLoading(false))
+    const qs = params.toString()
+    fetch(`/api/proxy/universities/${me.university}/applications/${qs ? `?${qs}` : ''}`)
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((data) => {
+        setApps(data.results || [])
+      }).catch(() => {
+        setApps([])
+      }).finally(() => setLoading(false))
   }, [me, statusFilter, programFilter])
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) { router.push('/login'); return }
-    authFetch<MeResponse>('auth/me/').then((m) => {
-      setMe(m)
+    getMe().then((m) => {
+      if (!m) { router.push('/login'); return }
+      const meData: MeResponse = { role: m.role, university: m.university, permission_level: m.permission_level }
+      setMe(meData)
       if (m.role !== 'universitystaff') { router.push('/dashboard'); return }
       if (!m.university) return
-      authFetch<{ results: ProgramItem[] }>(
-        `universities/${m.university}/programs/`
-      ).then((data) => {
-        setPrograms(data.results || [])
-      }).catch(() => {})
+      fetch(`/api/proxy/universities/${m.university}/programs/`)
+        .then((res) => res.ok ? res.json() : Promise.reject())
+        .then((data) => {
+          setPrograms(data.results || [])
+        }).catch(() => {})
     }).catch(() => {
       router.push('/login')
     })

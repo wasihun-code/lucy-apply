@@ -3,28 +3,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return (
-    document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1] ?? null
-  )
-}
+import { getMe } from '@/lib/auth'
 
 async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const base = API_URL.replace(/\/$/, '')
-  const url = `${base}/${path.replace(/^\//, '')}`
+  const url = `/api/proxy/${path.replace(/^\//, '')}`
   const res = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   })
@@ -59,11 +45,10 @@ export default function ProgramsPage() {
   const [me, setMe] = useState<MeResponse | null>(null)
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) { router.push('/login'); return }
-
-    authFetch<MeResponse>('auth/me/').then((m) => {
-      setMe(m)
+    getMe().then((m) => {
+      if (!m) { router.push('/login'); return }
+      const meData: MeResponse = { role: m.role, university: m.university, permission_level: m.permission_level || '' }
+      setMe(meData)
       if (m.role !== 'universitystaff') { router.push('/dashboard'); return }
       if (!m.university) { setLoading(false); return }
 

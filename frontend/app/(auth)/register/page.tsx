@@ -1,110 +1,104 @@
 'use client'
 
 import { useState, FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { AuthCard } from '@/components/layout/AuthCard'
+import { FormField } from '@/components/ui/FormField'
+import { Input } from '@/components/ui/Input'
+import { Button } from '@/components/ui/Button'
+import { Alert } from '@/components/ui/Alert'
+import { fetchAPI } from '@/lib/api'
+
+function getErrorMessage(e: unknown): string {
+  if (e instanceof Error) {
+    try {
+      const body = JSON.parse(e.message)
+      return body?.error?.message || body?.detail || body?.message || 'Registration failed'
+    } catch {
+      return e.message
+    }
+  }
+  return 'Registration failed'
+}
 
 export default function RegisterPage() {
-  const router = useRouter()
-  const [email, setEmail] = useState('')
   const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [country, setCountry] = useState('')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    setLoading(true)
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'}auth/register/`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email,
-            full_name: fullName,
-            password,
-            country_of_residence: country,
-          }),
-        },
-      )
+      await fetchAPI('/auth/register/', {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          full_name: fullName,
+          password,
+          country_of_residence: country,
+        }),
+      })
 
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error?.message || 'Registration failed')
-      }
-
-      router.push('/login?registered=true')
+      setSuccess(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed')
+      setError(getErrorMessage(err))
+    } finally {
+      setLoading(false)
     }
   }
 
-  return (
-    <div style={{ maxWidth: '400px', margin: '4rem auto' }}>
-      <h1 style={{ marginBottom: '1.5rem' }}>Register</h1>
-      {error && (
-        <p style={{ color: 'red', marginBottom: '1rem', padding: '0.5rem', background: '#fee2e2', borderRadius: '4px' }}>
-          {error}
+  if (success) {
+    return (
+      <AuthCard title="Create your account">
+        <Alert variant="success">
+          Check your email to verify your account.
+        </Alert>
+        <p className="mt-6 text-center text-sm font-body font-normal text-text-600">
+          <Link href="/login" className="font-medium text-primary hover:text-primary-dark transition-colors">
+            Back to login
+          </Link>
         </p>
+      </AuthCard>
+    )
+  }
+
+  return (
+    <AuthCard title="Create your account" subtitle="Start your application to Ethiopian universities today.">
+      {error && (
+        <div className="mb-4">
+          <Alert variant="danger">{error}</Alert>
+        </div>
       )}
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Full Name</label>
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '1rem' }}
-          />
-        </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '1rem' }}
-          />
-        </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={8}
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '1rem' }}
-          />
-        </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Country of Residence</label>
-          <input
-            type="text"
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '1rem' }}
-          />
-        </div>
-        <button
-          type="submit"
-          style={{
-            width: '100%', padding: '0.75rem', background: '#2563eb', color: '#fff',
-            border: 'none', borderRadius: '4px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          Register
-        </button>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <FormField label="Full Name" htmlFor="fullName" required>
+          <Input type="text" id="fullName" autoComplete="name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+        </FormField>
+        <FormField label="Email" htmlFor="email" required>
+          <Input type="email" id="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        </FormField>
+        <FormField label="Password" htmlFor="password" hint="Minimum 8 characters" required>
+          <Input type="password" id="password" autoComplete="new-password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required />
+        </FormField>
+        <FormField label="Country of Residence" htmlFor="country" hint="Where you currently live" required>
+          <Input type="text" id="country" autoComplete="country-name" value={country} onChange={(e) => setCountry(e.target.value)} required />
+        </FormField>
+        <Button type="submit" variant="primary" size="lg" className="w-full" loading={loading}>
+          Create Account
+        </Button>
       </form>
-      <p style={{ marginTop: '1rem', textAlign: 'center', color: '#666' }}>
-        Already have an account? <Link href="/login">Login</Link>
+      <p className="mt-6 text-center text-sm font-body font-normal text-text-600">
+        Already have an account?{' '}
+        <Link href="/login" className="font-medium text-primary hover:text-primary-dark transition-colors">
+          Sign in
+        </Link>
       </p>
-    </div>
+    </AuthCard>
   )
 }

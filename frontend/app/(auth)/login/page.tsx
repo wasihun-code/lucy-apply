@@ -1,24 +1,35 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { useState, FormEvent, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  return document.cookie.split('; ').find((c) => c.startsWith('access_token='))?.split('=')[1] ?? null
-}
+import { getMe } from '@/lib/auth'
+import { AuthCard } from '@/components/layout/AuthCard'
+import { FormField } from '@/components/ui/FormField'
+import { Input } from '@/components/ui/Input'
+import { Button } from '@/components/ui/Button'
+import { Alert } from '@/components/ui/Alert'
 
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    getMe().then((me) => {
+      if (!me) return
+      if (me.role === 'universitystaff') router.replace('/portal/applications')
+      else if (me.role === 'platformadmin') router.replace('/admin/universities')
+      else router.replace('/dashboard')
+    })
+  }, [router])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setError('')
+    setLoading(true)
 
     try {
       const res = await fetch('/api/auth/login/', {
@@ -32,76 +43,77 @@ export default function LoginPage() {
         throw new Error(data.error?.message || data.detail || 'Login failed')
       }
 
-      const meRes = await fetch(`${API_URL}auth/me/`, {
-        headers: { Authorization: `Bearer ${getToken()}` },
-      })
-      if (meRes.ok) {
-        const me = await meRes.json()
-        if (me.role === 'universitystaff') {
-          if (me.mfa_enabled && !me.mfa_verified) {
-            router.push('/mfa/verify?redirect=/portal')
-            return
-          }
-          router.push('/portal')
+      await res.json()
+
+      const meRes = await fetch('/api/auth/me/')
+
+      if (!meRes.ok) {
+        throw new Error('Failed to verify identity after login')
+      }
+
+      const me = await meRes.json()
+
+      if (me.role === 'universitystaff') {
+        if (me.mfa_enabled && !me.mfa_verified) {
+          router.push('/mfa/verify?redirect=/portal')
           return
         }
-        if (me.role === 'platformadmin') {
-          if (me.mfa_enabled && !me.mfa_verified) {
-            router.push('/mfa/verify?redirect=/admin/universities')
-            return
-          }
-          router.push('/admin/')
+        router.push('/portal/applications')
+        return
+      }
+      if (me.role === 'platformadmin') {
+        if (me.mfa_enabled && !me.mfa_verified) {
+          router.push('/mfa/verify?redirect=/admin/universities')
           return
         }
+        router.push('/admin/universities')
+        return
       }
       router.push('/dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
+    } finally {
+      setLoading(false)
     }
   }
 
   return (
-    <div style={{ maxWidth: '400px', margin: '4rem auto' }}>
-      <h1 style={{ marginBottom: '1.5rem' }}>Login</h1>
+    <AuthCard title="Sign in to Lucy Apply" subtitle="Welcome back. Enter your credentials to continue.">
       {error && (
-        <p style={{ color: 'red', marginBottom: '1rem', padding: '0.5rem', background: '#fee2e2', borderRadius: '4px' }}>
-          {error}
-        </p>
+        <div className="mb-4">
+          <Alert variant="danger">{error}</Alert>
+        </div>
       )}
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Email</label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '1rem' }}
-          />
-        </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Password</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #d1d5db', borderRadius: '4px', fontSize: '1rem' }}
-          />
-        </div>
-        <button
-          type="submit"
-          style={{
-            width: '100%', padding: '0.75rem', background: '#2563eb', color: '#fff',
-            border: 'none', borderRadius: '4px', fontSize: '1rem', fontWeight: 600, cursor: 'pointer',
-          }}
-        >
-          Login
-        </button>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <FormField label="Email" htmlFor="email" required>
+          <Input type="email" id="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        </FormField>
+        <FormField label="Password" htmlFor="password" required>
+          <Input type="password" id="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <div className="mt-1 text-right">
+            <Link href="/forgot-password" className="text-xs font-medium text-primary hover:text-primary-dark transition-colors">
+              Forgot password?
+            </Link>
+          </div>
+        </FormField>
+        <Button type="submit" variant="primary" size="lg" className="w-full" loading={loading}>
+          Sign In
+        </Button>
       </form>
-      <p style={{ marginTop: '1rem', textAlign: 'center', color: '#666' }}>
-        Don&apos;t have an account? <Link href="/register">Register</Link>
+      <div className="relative my-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs font-body font-normal text-text-400">
+          <span className="bg-surface px-2">or</span>
+        </div>
+      </div>
+      <p className="text-center text-sm font-body font-normal text-text-600">
+        Don&apos;t have an account?{' '}
+        <Link href="/register" className="font-medium text-primary hover:text-primary-dark transition-colors">
+          Register
+        </Link>
       </p>
-    </div>
+    </AuthCard>
   )
 }

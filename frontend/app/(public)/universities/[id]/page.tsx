@@ -142,7 +142,7 @@ export default async function UniversityDetailPage({ params }: { params: { id: s
               </p>
               <a
                 href="#programs-section"
-                className="inline-flex items-center justify-center h-11 px-5 text-base font-medium rounded bg-primary text-white hover:bg-primary-dark transition-colors w-full"
+                className="inline-flex items-center justify-center h-11 px-5 text-base font-medium rounded bg-primary text-white hover:bg-primary-dark transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 Browse Programs
               </a>

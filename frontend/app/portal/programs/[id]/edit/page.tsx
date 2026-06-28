@@ -3,38 +3,7 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return (
-    document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1] ?? null
-  )
-}
-
-async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const base = API_URL.replace(/\/$/, '')
-  const url = `${base}/${path.replace(/^\//, '')}`
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  })
-  if (!res.ok) {
-    const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
-    throw new Error(msg)
-  }
-  return res.json()
-}
+import { getMe } from '@/lib/auth'
 
 interface ProgramDetail {
   id: string
@@ -67,14 +36,14 @@ export default function EditProgramPage() {
 
   useEffect(() => {
     if (!programId) return
-    authFetch<{ role: string; permission_level?: string }>('auth/me/').then((m) => {
-      if (m.role !== 'universitystaff' || m.permission_level !== 'admin') {
+    getMe().then(async (m) => {
+      if (!m || m.role !== 'universitystaff' || m.permission_level !== 'admin') {
         router.push('/portal/programs')
         return
       }
-      return authFetch<ProgramDetail>(`programs/${programId}/`)
-    }).then((p) => {
-      if (!p) return
+      const res = await fetch(`/api/proxy/programs/${programId}/`)
+      if (!res.ok) throw new Error('Failed to load')
+      const p: ProgramDetail = await res.json()
       setName(p.name)
       setDegreeLevel(p.degree_level)
       setDescription(p.description || '')
@@ -96,8 +65,9 @@ export default function EditProgramPage() {
     setSuccess(false)
 
     try {
-      await authFetch(`programs/${programId}/`, {
+      const res = await fetch(`/api/proxy/programs/${programId}/`, {
         method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           degree_level: degreeLevel,
@@ -106,6 +76,11 @@ export default function EditProgramPage() {
           fee_currency: feeCurrency,
         }),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+        throw new Error(msg)
+      }
       setSuccess(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to update program')
@@ -117,10 +92,16 @@ export default function EditProgramPage() {
   async function handlePublish() {
     if (!programId) return
     try {
-      await authFetch(`programs/${programId}/status/`, {
+      const res = await fetch(`/api/proxy/programs/${programId}/status/`, {
         method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'published' }),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+        throw new Error(msg)
+      }
       setStatus('published')
       setSuccess(true)
     } catch (e) {

@@ -2,12 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  return document.cookie.split('; ').find((c) => c.startsWith('access_token='))?.split('=')[1] ?? null
-}
+import { getMe } from '@/lib/auth'
 
 export default function MFASetupPage() {
   const router = useRouter()
@@ -19,34 +14,30 @@ export default function MFASetupPage() {
   const [verified, setVerified] = useState(false)
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) { router.push('/login'); return }
+    getMe().then((me) => {
+      if (!me) { router.push('/login'); return }
 
-    fetch(`${API_URL}auth/mfa/setup/`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
+      fetch('/api/proxy/auth/mfa/setup/', { method: 'POST' })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.provisioning_uri) {
+            setProvisioningUri(data.provisioning_uri)
+          } else {
+            setError(data.error?.message || 'Failed to setup MFA')
+          }
+        })
+        .catch((e) => setError(e.message))
+        .finally(() => setLoading(false))
     })
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.provisioning_uri) {
-          setProvisioningUri(data.provisioning_uri)
-        } else {
-          setError(data.error?.message || 'Failed to setup MFA')
-        }
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
   }, [router])
 
   async function handleVerify(e: React.FormEvent) {
     e.preventDefault()
     setVerifyError('')
-    const token = getToken()
-    if (!token) return
 
-    const res = await fetch(`${API_URL}auth/mfa/verify/`, {
+    const res = await fetch('/api/proxy/auth/mfa/verify/', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code }),
     })
     const data = await res.json()

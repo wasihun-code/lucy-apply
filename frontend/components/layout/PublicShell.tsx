@@ -48,9 +48,9 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
             ) : (
               <div className="flex items-center gap-3">
                 <span className="text-xs font-medium text-text-400 px-2 py-0.5 rounded-full bg-background border border-border">
-                  {user.role === 'platform_admin'
+                  {user.role === 'platformadmin'
                     ? 'Admin'
-                    : user.role === 'university_staff'
+                    : user.role === 'universitystaff'
                     ? 'Staff'
                     : 'Applicant'}
                 </span>
@@ -58,8 +58,8 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    if (user.role === 'platform_admin') router.push('/admin/universities')
-                    else if (user.role === 'university_staff') router.push('/portal')
+                    if (user.role === 'platformadmin') router.push('/admin/universities')
+                    else if (user.role === 'universitystaff') router.push('/portal')
                     else router.push('/dashboard')
                   }}
                 >

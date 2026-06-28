@@ -139,13 +139,12 @@ export default async function ProgramDetailPage({
                         <p className="text-xs text-text-400">
                           Deadline: {formatDate(cycle.close_date)}
                         </p>
-                        <Link
+                        <a
                           href={`/dashboard/apply/${params.programId}/?cycle=${cycle.id}`}
+                          className="inline-flex items-center justify-center h-10 px-4 text-sm font-medium rounded bg-primary text-white hover:bg-primary-dark transition-colors w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          <Button variant="primary" size="sm" className="w-full">
-                            Apply Now
-                          </Button>
-                        </Link>
+                          Apply Now
+                        </a>
                       </div>
                     ))}
                   </div>

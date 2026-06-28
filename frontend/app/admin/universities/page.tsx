@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { fetchAdminUniversities, type AdminUniversity } from '@/lib/api'
+import { getMe } from '@/lib/auth'
+import type { AdminUniversity } from '@/lib/api'
 
 export default function AdminUniversitiesPage() {
   const router = useRouter()
@@ -12,16 +13,24 @@ export default function AdminUniversitiesPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const token = document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1]
-    if (!token) { router.push('/login'); return }
-
-    fetchAdminUniversities(token)
-      .then(setUniversities)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
+    async function load() {
+      try {
+        const me = await getMe()
+        if (!me || me.role !== 'platformadmin') {
+          router.push('/login')
+          return
+        }
+        const res = await fetch('/api/proxy/admin/universities/')
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json()
+        setUniversities(data.results ?? data)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load')
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
   }, [router])
 
   if (loading) return <p>Loading universities...</p>

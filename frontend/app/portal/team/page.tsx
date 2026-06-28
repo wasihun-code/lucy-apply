@@ -2,28 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { fetchStaff, inviteStaff, removeStaff, type StaffMember } from '@/lib/api'
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function getToken(): string | null {
-  if (typeof window === 'undefined') return null
-  return (
-    document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1] ?? null
-  )
-}
-
-async function fetchMe(): Promise<{ university: string; permission_level: string }> {
-  const token = getToken()
-  const res = await fetch(`${API_URL}auth/me/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  const data = await res.json()
-  return { university: data.university, permission_level: data.permission_level }
-}
+import { getMe } from '@/lib/auth'
+import type { StaffMember } from '@/lib/api'
 
 export default function TeamPage() {
   const router = useRouter()
@@ -39,36 +19,43 @@ export default function TeamPage() {
   const [inviting, setInviting] = useState(false)
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) { router.push('/login'); return }
-
-    fetchMe()
-      .then((me) => {
-        setUniversityId(me.university)
-        setIsAdmin(me.permission_level === 'admin')
-        return fetchStaff(token, me.university)
-      })
-      .then(setStaff)
-      .catch((e) => setError(e.message))
+    getMe().then(async (me) => {
+      if (!me || !me.university) {
+        router.push('/login')
+        return
+      }
+      setUniversityId(me.university)
+      setIsAdmin(me.permission_level === 'admin')
+      const res = await fetch(`/api/proxy/universities/${me.university}/staff/`)
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      setStaff(data)
+    }).catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [router])
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()
-    const token = getToken()
-    if (!token) return
+    if (!universityId) return
     setInviting(true)
     setError('')
     try {
-      await inviteStaff(token, universityId, {
-        email: inviteEmail,
-        full_name: inviteName,
-        permission_level: inviteLevel,
+      const res = await fetch(`/api/proxy/universities/${universityId}/staff/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: inviteEmail,
+          full_name: inviteName,
+          permission_level: inviteLevel,
+        }),
       })
+      if (!res.ok) throw new Error(await res.text())
       setInviteEmail('')
       setInviteName('')
       setInviteLevel('officer')
-      const updated = await fetchStaff(token, universityId)
+      const updatedRes = await fetch(`/api/proxy/universities/${universityId}/staff/`)
+      if (!updatedRes.ok) throw new Error(await updatedRes.text())
+      const updated = await updatedRes.json()
       setStaff(updated)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to invite staff')
@@ -79,11 +66,15 @@ export default function TeamPage() {
 
   async function handleRemove(staffId: string) {
     if (!confirm('Deactivate this staff member?')) return
-    const token = getToken()
-    if (!token) return
+    if (!universityId) return
     try {
-      await removeStaff(token, universityId, staffId)
-      const updated = await fetchStaff(token, universityId)
+      const res = await fetch(`/api/proxy/universities/${universityId}/staff/${staffId}/`, {
+        method: 'DELETE',
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const updatedRes = await fetch(`/api/proxy/universities/${universityId}/staff/`)
+      if (!updatedRes.ok) throw new Error(await updatedRes.text())
+      const updated = await updatedRes.json()
       setStaff(updated)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to remove staff')

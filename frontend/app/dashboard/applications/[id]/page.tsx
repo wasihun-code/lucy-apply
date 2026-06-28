@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { getMe } from '@/lib/auth'
 import type {
   Application,
   ApplicationDocument,
@@ -11,28 +12,12 @@ import type {
   UploadUrlResponse,
 } from '@/lib/api'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function apiUrl(path: string): string {
-  return `${API_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
-}
-
-function getToken(): string | null {
-  return (
-    document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1] ?? null
-  )
-}
-
 async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const res = await fetch(apiUrl(path), {
+  const url = `/api/proxy/${path.replace(/^\//, '')}`
+  const res = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   })
@@ -57,13 +42,13 @@ export default function ApplicationDetailPage() {
   const [uploading, setUploading] = useState<string | null>(null)
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) {
-      router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
-      return
-    }
-
     async function load() {
+      const me = await getMe()
+      if (!me) {
+        router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
+        return
+      }
+
       try {
         const [app, hist] = await Promise.all([
           authFetch<Application>(`applications/${params.id}/`),
@@ -157,10 +142,8 @@ export default function ApplicationDetailPage() {
         form.append('file', file)
         form.append('object_key', urlResp.object_key)
 
-        const token = getToken()
-        const res = await fetch(apiUrl(`applications/${application.id}/documents/`), {
+        const res = await fetch(`/api/proxy/applications/${application.id}/documents/`, {
           method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: form,
         })
 

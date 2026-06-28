@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createUniversity } from '@/lib/api'
+import { getMe } from '@/lib/auth'
 
 export default function NewUniversityPage() {
   const router = useRouter()
@@ -12,22 +12,30 @@ export default function NewUniversityPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    getMe().then((me) => {
+      if (!me || me.role !== 'platformadmin') router.push('/login')
+    })
+  }, [router])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
     setError('')
-    const token = document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1]
-    if (!token) { router.push('/login'); return }
-
     try {
-      await createUniversity(token, {
-        name,
-        description,
-        accreditation_info: accreditation || undefined,
+      const res = await fetch('/api/proxy/universities/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description,
+          accreditation_info: accreditation || undefined,
+        }),
       })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || `HTTP ${res.status}`)
+      }
       router.push('/admin/universities')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to create university')

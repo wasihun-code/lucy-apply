@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { getMe } from '@/lib/auth'
 import type {
   Application,
   ApplicationDocument,
@@ -14,28 +15,12 @@ import type {
   PaymentIntentResponse,
 } from '@/lib/api'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
-
-function apiUrl(path: string): string {
-  return `${API_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
-}
-
-function getToken(): string | null {
-  return (
-    document.cookie
-      .split('; ')
-      .find((c) => c.startsWith('access_token='))
-      ?.split('=')[1] ?? null
-  )
-}
-
 async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken()
-  const res = await fetch(apiUrl(path), {
+  const url = `/api/proxy/${path.replace(/^\//, '')}`
+  const res = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   })
@@ -72,13 +57,13 @@ export default function ApplyPage({ params }: { params: { programId: string } })
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) {
-      router.push('/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search))
-      return
-    }
-
     async function init() {
+      const me = await getMe()
+      if (!me) {
+        router.push('/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search))
+        return
+      }
+
       try {
         const [prog, appsResp] = await Promise.all([
           authFetch<Program>(`programs/${params.programId}/`),
@@ -263,10 +248,8 @@ export default function ApplyPage({ params }: { params: { programId: string } })
         form.append('file', file)
         form.append('object_key', urlResp.object_key)
 
-        const token = getToken()
-        const res = await fetch(apiUrl(`applications/${application?.id}/documents/`), {
+        const res = await fetch(`/api/proxy/applications/${application?.id}/documents/`, {
           method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: form,
         })
 
