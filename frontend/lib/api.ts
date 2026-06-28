@@ -2,6 +2,7 @@ const API_URL = typeof window === 'undefined'
   ? process.env.API_URL || 'http://localhost:8000/api/v1/'
   : process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1/'
 
+// TODO FE-04: add credentials: 'include' to enable httpOnly cookie auth
 export async function fetchAPI<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${API_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
   const res = await fetch(url, {

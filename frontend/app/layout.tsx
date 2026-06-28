@@ -1,6 +1,24 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import './globals.css'
+import { Plus_Jakarta_Sans, Inter, JetBrains_Mono } from 'next/font/google'
+import '@/styles/globals.css'
+
+const display = Plus_Jakarta_Sans({
+  subsets: ['latin'],
+  weight: ['600', '700'],
+  variable: '--font-display',
+})
+
+const body = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-body',
+})
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400'],
+  variable: '--font-mono',
+})
 
 export const metadata: Metadata = {
   title: 'Lucy Apply',
@@ -9,24 +27,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>
-        <nav className="nav">
-          <div className="container">
-            <Link href="/" className="nav-brand">
-              Lucy Apply
-            </Link>
-            <div className="nav-links">
-              <Link href="/universities">Universities</Link>
-              <Link href="/login">Login</Link>
-              <Link href="/register">Register</Link>
-            </div>
-          </div>
-        </nav>
-        <main className="container" style={{ paddingTop: '2rem', paddingBottom: '2rem' }}>
-          {children}
-        </main>
-      </body>
+    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+      <body>{children}</body>
     </html>
   )
 }
