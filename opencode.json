@@ -1,49 +1,37 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "instructions": [
-    "context/ARCHITECTURE.md",
-    "context/DATABASE_SCHEMA.md",
-    "context/API_ROUTES.md",
-    "context/PERMISSIONS.md",
-    "context/STATE_MACHINES.md",
-    "context/SECURITY.md"
+    "AGENTS.md",
+    "context/FE_DESIGN_SYSTEM.md",
+    "context/FE_ARCHITECTURE.md",
+    "context/FE_AUDIT.md"
   ],
   "agent": {
     "build": {
-      "mode": "primary",
       "model": "opencode/big-pickle",
-      "temperature": 0.2,
-      "description": "Full build agent — writes models, views, serializers, tests. Use for implementation sprints.",
-      "permission": {
-        "edit": "allow",
-        "bash": "allow"
-      }
+      "mode": "primary"
     },
     "plan": {
-      "mode": "primary",
       "model": "opencode/deepseek-v4-flash-free",
-      "temperature": 0.1,
-      "description": "Read-only planning agent. Use this FIRST on every sprint to review the plan before building.",
+      "mode": "primary",
       "permission": {
         "edit": "deny",
         "bash": "deny"
       }
     },
-    "review": {
+    "fe-review": {
+      "description": "Frontend code review: checks design system compliance, accessibility, missing empty/error/loading states, and component consistency. Read-only.",
       "mode": "subagent",
       "model": "opencode/mimo-v2.5-free",
-      "temperature": 0.1,
-      "description": "Code review agent — checks for tenant-scoping errors, permission gaps, and state machine violations. Invoke with @review.",
       "permission": {
         "edit": "deny",
         "bash": "deny"
       }
     },
-    "security-check": {
+    "visual-check": {
+      "description": "Design system compliance check. Audits a specific component or page for hardcoded colors, wrong button variants, missing tokens, and icon library violations.",
       "mode": "subagent",
-      "model": "opencode/nemotron-3-ultra-free",
-      "temperature": 0.0,
-      "description": "Security-focused review agent. Checks for cross-tenant leaks, webhook signature bypass, payment fee tampering, and JWT misuse. Invoke with @security-check before any auth/payment/document PR.",
+      "model": "opencode/mimo-v2.5-free",
       "permission": {
         "edit": "deny",
         "bash": "deny"

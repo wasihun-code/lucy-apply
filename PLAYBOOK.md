@@ -1,198 +1,206 @@
-# Lucy Apply — OpenCode Execution Playbook
+# Lucy Apply — Frontend Revamp Playbook
 
-How to use OpenCode to build Lucy Apply sprint by sprint. Read this before starting Sprint 1.
+How to use OpenCode to execute the frontend revamp sprint by sprint.
+Read this before starting FE-01.
 
 ---
 
 ## What's in this package
 
 ```
-lucy-apply-opencode/
-  AGENTS.md                    ← Standing brief, loaded in EVERY OpenCode session automatically
-  opencode.json                ← OpenCode config: custom agents, instruction files
+lucy-apply-fe-opencode/
+  AGENTS.md                       ← Standing brief, loaded in EVERY OpenCode session
+  PLAYBOOK.md                     ← This file
+  opencode.json                   ← OpenCode config: agents, instructions
   context/
-    ARCHITECTURE.md            ← Stack, app structure, abstract base classes
-    DATABASE_SCHEMA.md         ← Every model field, every FK, every index
-    API_ROUTES.md              ← All 45 endpoints with methods, paths, roles
-    PERMISSIONS.md             ← DRF permission classes and CRUD matrix
-    STATE_MACHINES.md          ← Application, document, and cycle state machines
-    SECURITY.md                ← Non-negotiable security rules and audit events
+    FE_DESIGN_SYSTEM.md           ← Complete design token and component spec
+    FE_ARCHITECTURE.md            ← Frontend stack, file structure, API integration
+    FE_AUDIT.md                   ← Visual and UX audit findings (reference only)
   .opencode/
     agents/
-      review.md                ← @review subagent — code review focused on Lucy Apply patterns
-      security-check.md        ← @security-check subagent — security audit checklist
+      fe-review.md                ← @fe-review — frontend code review subagent
+      visual-check.md             ← @visual-check — design system compliance check
     commands/
-      sprint1.md               ← /sprint1 command
-      sprint2.md               ← /sprint2 command
-      sprint3.md               ← /sprint3 command
-      sprint4.md               ← /sprint4 command
-      sprint5.md               ← /sprint5 command
-      sprint6.md               ← /sprint6 command
-      sprint7.md               ← /sprint7 command
-      sprint8.md               ← /sprint8 command
-      sprint9.md               ← /sprint9 command
-      sprint10.md              ← /sprint10 command
-      sprint11.md              ← /sprint11 command
+      fe01.md → fe16.md           ← /fe01 through /fe16 sprint commands
 ```
 
 ---
 
-## One-time setup
-
-### 1. Place these files in your project root
+## One-Time Setup
 
 ```bash
-git init lucy-apply
-cd lucy-apply
-# Copy this entire package into the repo root
-# Commit it before writing any code
-git add .
-git commit -m "chore: add opencode project setup (AGENTS.md, context, agents, sprint commands)"
+# From your lucy-apply repo root:
+cp -r lucy-apply-fe-opencode/. .
+git add AGENTS.md PLAYBOOK.md opencode.json context/ .opencode/
+git commit -m "chore: add frontend revamp opencode package"
 ```
 
-### 2. Run /init in OpenCode
+Then in OpenCode:
 ```
 opencode
 > /init
 ```
-OpenCode will scan your repo and improve AGENTS.md with additional project-specific details it discovers. Let it run and commit the result.
-
-### 3. Configure your model
-In `opencode.json`, verify the model is set to opencode zen or the best model available to you. The build and plan agents both default to opencode zen and deepseek v4 adjust if needed.
 
 ---
 
-## The playbook: how to work through each sprint
+## The Playbook — How to Work Through Each Sprint
 
-### Rule 1: Plan before Build (non-negotiable)
+### Rule 1: Plan before Build
 
-OpenCode has two primary modes: **Plan** (read-only, no file changes) and **Build** (full access). Press **Tab** to switch between them.
+OpenCode has two primary modes. Press **Tab** to switch.
 
 **Every sprint starts in Plan mode:**
 ```
-[Tab to switch to Plan mode]
-/sprint1
+[Tab → Plan mode]
+/fe01
 ```
 
-The agent reads the sprint card, reviews the existing codebase (if any), and proposes what it will do. Review the plan. Ask questions. Clarify any ambiguity. Only when you're satisfied:
+The agent reads the sprint card, inspects the existing frontend files, and proposes
+exactly what it will change. Review the plan. Ask questions. Only when satisfied:
 
 ```
-[Tab to switch to Build mode]
+[Tab → Build mode]
 Go ahead and implement the plan.
 ```
 
-This two-step approach is especially important for Lucy Apply because several sprints touch security-sensitive code (payments, tenancy, MFA) where a quietly wrong implementation is worse than no implementation.
+FE-01 is the most critical sprint. The design token system it creates is the foundation
+everything else depends on. Spend extra time reviewing the plan before building.
 
 ### Rule 2: One sprint at a time
 
-Do not load multiple sprint cards in one session. Each sprint card is the full scope — if you also ask for Sprint 2 work in a Sprint 1 session, the agent will start making decisions that depend on structures that don't exist yet.
+Do not load multiple sprint cards in one session. Each card is the complete scope.
 
-### Rule 3: @review before moving to the next sprint
+### Rule 3: @fe-review after every sprint
 
-After completing a sprint's implementation and before starting the next:
 ```
-@review please review the changes in this sprint for tenant-scoping errors, permission gaps, and state machine violations
-```
-
-Fix everything rated CRITICAL or HIGH before moving on. Medium and Low can be deferred to Sprint 11's edge-case pass.
-
-### Rule 4: @security-check on Sprints 5, 10, and any payment/auth changes
-
-Sprint 5 (payment), Sprint 9 (MFA and platform admin), and Sprint 10 (security hardening) must each get a `@security-check` pass:
-```
-@security-check please audit payments/views.py and identity/permissions.py
+@fe-review please review the changes in this sprint
 ```
 
-### Rule 5: Commit after each working increment, not just each sprint
+Fix everything rated CRITICAL or HIGH before advancing. The most common issues:
+- Hardcoded hex color instead of design token
+- Button variant that isn't in the design system
+- Missing empty state on a list component
+- Missing skeleton loader on an async fetch
+- Raw JSON surfaced in an error state
 
-Don't accumulate a sprint's worth of untracked changes. Commit at logical stopping points within a sprint (e.g. "models done", "API done", "tests passing"). This gives you clean /undo points inside OpenCode and clean git history for debugging.
+### Rule 4: Run build checks before closing every sprint
+
+```bash
+cd frontend
+npx tsc --noEmit     # zero TypeScript errors required
+next build            # must succeed
+```
+
+If either fails, the sprint is not done.
+
+### Rule 5: Don't touch backend files
+
+The frontend revamp is frontend-only. The backend is complete and tested (254 pytest
+tests passing, 34 QA scripts passing). Never modify Django files during these sprints.
+
+### Rule 6: Commit at logical increments
+
+Suggested commit points within a sprint:
+1. After design tokens / global CSS
+2. After layout shell components
+3. After each page or feature section
+4. After all tests pass
 
 ---
 
-## Working with the context files
+## Working with Context Files
 
-OpenCode loads all six context files automatically via `opencode.json`'s `instructions` field. But you can also reference them explicitly in a prompt:
+OpenCode loads all three context files automatically via `opencode.json`. Reference
+them explicitly when the agent seems to be guessing:
 
 ```
-Before writing the Application serializer, read context/DATABASE_SCHEMA.md and context/STATE_MACHINES.md first.
-```
-
-If the agent seems to be guessing at a field name or making up a relationship, interrupt it and say:
-```
-Stop. Read context/DATABASE_SCHEMA.md and confirm the exact field names before continuing.
-```
-
----
-
-## Using the subagents
-
-### @review — use after every sprint
-```
-@review check admissions/views.py and admissions/serializers.py for tenant-scoping issues
-```
-
-### @security-check — use before any payment/auth PR and before Sprint 11
-```
-@security-check audit payments/views.py
-```
-
-### @explore — use when you need to find something in the codebase
-```
-@explore find all places where Application.status is set directly (not via transition_application)
-```
-
-### @scout — use when you need to check a library's API
-```
-@scout check how django-otp TOTPDevice enrollment works in the current version
+Stop. Read context/FE_DESIGN_SYSTEM.md and confirm the exact color token names
+before writing any Tailwind classes.
 ```
 
 ---
 
-## Common pitfalls to avoid
+## Using the Subagents
 
-### 1. The agent writes `Application.objects.all()` somewhere — stop it
-If you see an unscoped `.objects.all()` on a tenant-scoped model anywhere other than a system task (Celery beat job) or Platform Admin view, that's a potential cross-tenant data leak. Run `@review` immediately.
-
-### 2. The agent puts fee_amount in the payment request body
-The client should never send a fee amount. If the agent writes a serializer that accepts `fee_amount` from `request.data` in the payment flow, reject it and explain: "The fee comes from `program.fee_amount` server-side. Remove this field from the request serializer."
-
-### 3. The agent adds JWT auth to the webhook
-The `/payments/webhook/` view must have `@csrf_exempt` and must NOT have `IsAuthenticated` in its permission_classes. If the agent adds auth to it, the webhook will always return 401 and payment confirmations will silently fail.
-
-### 4. The agent writes status transitions directly (`application.status = 'admitted'`)
-Every status change must go through `transition_application()` in `admissions/state_machine.py`. If the agent bypasses this, the state machine can get into invalid states and ApplicationStatusHistory records won't be created. Tell it: "Don't write `application.status = x` directly. Call `transition_application(application, 'admitted', actor_type, actor_id)` instead."
-
-### 5. Context window getting long mid-sprint
-OpenCode automatically compacts context when it gets long. If you notice it starting to forget earlier decisions mid-sprint, start a new session and load the sprint card again:
+### @fe-review — use after every sprint
 ```
-/sprintN (where N is the current sprint)
-Here is where we left off: [brief summary of what's done and what's remaining]
+@fe-review review the dashboard page for design system compliance and accessibility
+```
+
+### @visual-check — use when a page feels off
+```
+@visual-check check the university card component against the design system spec
 ```
 
 ---
 
-## Milestone checkpoints
+## Common Pitfalls to Avoid
 
-These are the four moments where you stop and manually test before coding again:
+### 1. Hardcoded hex values
+The agent may write `text-[#1B4FBF]` or `bg-[#0F7B55]`. Stop it.
+All colors must come from Tailwind config tokens, not arbitrary values.
+Correct: `text-primary`, `bg-success`.
 
-| After Sprint | Milestone | What to test manually |
+### 2. Wrong shell for a page
+The applicant dashboard must use `ApplicantShell`, not `PublicShell`.
+The staff portal must use `StaffShell`. If the agent puts a page in the wrong shell,
+the navigation will be inconsistent.
+
+### 3. Raw fetch() calls in components
+All API calls go through `lib/api.ts`. If the agent writes `fetch('/api/v1/...')` 
+directly in a component, reject it. The typed wrapper handles auth headers, error
+normalization, and base URL.
+
+### 4. Missing error handling
+Every `api.ts` call that can fail must have a catch block that sets a user-readable
+error state. Never let `JSON.stringify(error)` reach the DOM.
+
+### 5. Skipping empty states
+If the agent renders an empty list as just nothing (no component, no message), reject
+it. Every list must have a designed empty state.
+
+### 6. Using non-lucide icons
+The agent may suggest importing from `react-icons`, `heroicons`, or other libraries.
+Reject. `lucide-react` only.
+
+---
+
+## Milestone Checkpoints
+
+| After Sprint | Checkpoint | Manual test |
 |---|---|---|
-| 3 | Milestone 0+1 | Staging is live; seeded programs visible at the public URL |
-| 6 | Milestone 2 | Full applicant journey: register → apply → pay → receive admit email → accept offer |
-| 8 | Milestone 3 | Same as Milestone 2, but officer does the review/decision in the real UI |
-| 11 | Milestone 4 (MVP) | Full loop on Production, university onboarded via UI |
-
-At each checkpoint: if the end-to-end test fails, stay in the current milestone, don't advance to the next sprint. The sprint cards assume the prior milestone works correctly.
+| FE-01 | Design system live | Open any page — does it look different? Token system in place? |
+| FE-04 | Auth complete | Can register, login, reset password, verify email end-to-end? |
+| FE-06 | Full applicant flow | Can apply end-to-end: browse → apply → pay → track? |
+| FE-10 | All portal pages | Can officer review and decision an application? |
+| FE-13 | Admin complete | Can platform admin onboard a university? |
+| FE-16 | Full revamp done | Does the product feel like a cohesive SaaS? |
 
 ---
 
-## Quick reference: sprint to milestone mapping
+## Sprint-to-Milestone Mapping
 
 | Sprints | Milestone |
 |---|---|
-| 1–3 | Foundations + thin university data |
-| 4–6 | Full applicant experience (Milestone 2) |
-| 7–8 | Full university staff experience (Milestone 3) |
-| 9–11 | Platform admin + security + launch (Milestone 4) |
+| FE-01 to FE-04 | Foundation: design system + public pages + auth |
+| FE-05 to FE-06 | Applicant experience complete |
+| FE-07 to FE-10 | Staff portal complete |
+| FE-11 to FE-13 | Admin portal complete |
+| FE-14 to FE-16 | Polish: MFA, profile, timeline, notifications |
 
-Total: 11 sprints, 12–18 weeks at 10–15 hrs/week. You're building something real.
+---
+
+## Important Sprint Note: FE-06 → FE-06b
+
+**Do not run `/fe06`.** It has been superseded by `/fe06b`.
+
+`/fe06b` implements a section-based wizard (freely navigable sections with a sidebar)
+rather than the locked 3-step flow described in `/fe06`. The section-based pattern
+better matches real admissions platform UX.
+
+The sprint order is:
+```
+FE-01 → FE-02 → FE-03 → FE-04 → FE-05 → FE-06b → FE-07 → ... → FE-16
+```
+
+`/fe06` exists in the commands folder for reference only. Do not run it.
