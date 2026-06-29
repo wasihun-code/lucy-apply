@@ -2,18 +2,18 @@
 
 Monorepo: Django 6.0 backend (Python 3.12, DRF, Celery, PostgreSQL/Redis) + Next.js 14 frontend (TypeScript, App Router).
 
-**Current phase:** Frontend revamp (FE Sprints 1–16). Backend is complete and frozen — do not modify.
+**Phase:** Frontend revamp (FE Sprints 1–16). Backend is frozen — do not modify Django files.
 
 ---
 
-## Verification commands (run after every change)
+## Verification (run after every change)
 
 ```bash
-# Backend — requires PostgreSQL + Redis (use `docker compose up -d db redis` or CI)
+# Backend — requires PostgreSQL + Redis running (docker compose up -d db redis)
 pytest --tb=short                       # 254 tests, all must pass
 
 # Frontend
-cd frontend && npx tsc --noEmit        # zero TS errors required
+cd frontend && npx tsc --noEmit         # zero TS errors
 cd frontend && next build               # must succeed (standalone output)
 ```
 
@@ -23,14 +23,14 @@ CI runs `python manage.py check` then `pytest --tb=short`.
 
 ## Architecture must-knows
 
-- **Auth:** httpOnly JWT cookies via Next.js proxy route `/api/auth/login/`. Never read/write tokens to `localStorage` or `sessionStorage`.
-- **API layer:** All calls go through `frontend/lib/api.ts` (`fetchAPI`). Never write raw `fetch()` in pages/components. The current wrapper lacks `credentials: 'include'` — expect cookie-based auth to break without it.
-- **Three layout shells:** `PublicShell` (public pages), `ApplicantShell` (`/dashboard/**`), `StaffShell` (`/portal/**`, `/admin/**`). Every page slots into exactly one.
-- **Wizard:** Section-based pattern (`/dashboard/apply/[programId]?section=...`), NOT a linear step flow. Sections are freely navigable. FE-06 is superseded by FE-06b.
-- **Auto-save:** Debounced 2000ms, save state indicator in wizard top bar.
-- **Design tokens:** CSS custom properties → Tailwind (tailwind.config.ts maps vars). See `context/FE_DESIGN_SYSTEM.md`.
-- **Icons:** `lucide-react` only. Not yet in package.json — add it when needed.
-- **Stripe:** Required in production; dev/test uses test keys or empty (graceful fallback).
+- **Auth:** httpOnly JWT cookies via Next.js proxy `/api/auth/login/`. Never read/write tokens to `localStorage` or `sessionStorage`.
+- **API layer:** `fetchAPI` in `frontend/lib/api.ts` is the typed wrapper. Some legacy functions in that same file (`login`, `fetchAdminUniversities`, `createUniversity`, etc.) use raw `fetch()` with Bearer token — migrate to `fetchAPI` when touching. `fetchAPI` lacks `credentials: 'include'` (TODO FE-04) — cookie-based auth will break without it.
+- **Three layout shells:** `PublicShell` (`app/(public)/layout.tsx`), `ApplicantShell` (`app/dashboard/layout.tsx`), `StaffShell` (`app/portal/**`, `app/admin/**`). Every page slots into exactly one via route group layout.
+- **Wizard:** Section-based (`/dashboard/apply/[programId]?section=...`), freely navigable sections. Not a linear step flow.
+- **Auto-save:** Debounced 2000ms via `lodash.debounce` or `useMemo` pattern, save state indicator in wizard top bar.
+- **Design tokens:** CSS custom properties in `globals.css` → `tailwind.config.ts`. Colors from tokens only, never hex literals. `--color-accent` (#C8963A gold) is for admitted/accepted/milestone only — never buttons or nav.
+- **Icons:** `lucide-react` only.
+- **`next.config.js`** sets `output: 'standalone'` (Cloud Run). Images allowed from `storage.googleapis.com`.
 
 ---
 
@@ -38,23 +38,47 @@ CI runs `python manage.py check` then `pytest --tb=short`.
 
 | Path | Owner | Touching rules |
 |---|---|---|
-| `frontend/` | Frontend revamp | Edit freely during FE sprints |
-| `lucy_apply/`, `identity/`, `programs/`, `admissions/`, `documents/`, `payments/`, `notifications/`, `audit/`, `universities/`, `tests/` | Backend | **Do not modify** — backend is complete and tested |
-| `context/` | Design reference | Read-only reference docs |
+| `frontend/` | Frontend revamp | Edit freely |
+
+| `backend top-level dirs` `(lucy_apply/, identity/, programs/, admissions/, documents/, payments/, notifications/, audit/, universities/, tests/)` | Backend | **Do not modify** |
+| `context/` | Design reference | Read-only |
 | `.opencode/` | OpenCode config | Sprint commands (`/fe01`–`/fe16`), subagents (`@fe-review`, `@visual-check`) |
 
 ---
 
-## Known gaps (being fixed in progressive sprints)
+## Frontend test runner
 
-- Navbar shows Login/Register when logged in — needs `getMe()` in shell
-- Raw JSON errors surface to users (e.g. `CYCLE_CLOSED`) — must catch and show `<Alert variant="danger">`
-- No EmptyState, Skeleton, Card, Button, or Input primitives exist yet — build per design system spec
-- Wizard uses section-based navigation (`?section=`), not the old 3-step flow
+- **Vitest** (not Jest): `cd frontend && npm test` or `cd frontend && npx vitest run`
+- Config: `frontend/vitest.config.ts`, setup: `frontend/vitest.setup.ts`
+- Tests live in `frontend/__tests__/`
+- Docker compose has a `frontend-test` service: `docker compose run --rm frontend-test`
 
 ---
 
-## Existing instructions loaded via opencode.json
+## Backend testing quirks
+
+- `pytest-django` with `DJANGO_SETTINGS_MODULE=lucy_apply.settings` (see `pytest.ini`)
+- `conftest.py` sets `OPENSE_TESTING=true` env var
+- QA scripts: `bash qa/run_all.sh` — shell-based integration tests
+- `dev-test.sh`: full docker-compose test pipeline (build → up → frontend-tests → pytest → qa)
+
+---
+
+## Route group structure
+
+The landing page is at `app/(public)/page.tsx`, NOT `app/page.tsx`. Route groups: `(public)`, `(auth)`, `dashboard/`, `portal/`, `admin/`.
+
+---
+
+## Known gaps (being fixed in sprints)
+
+- `fetchAPI` lacks `credentials: 'include'` — cookie auth is broken currently
+- Raw JSON errors surface to users (e.g. `CYCLE_CLOSED`) — must catch and show `<Alert variant="danger">`
+- Some `api.ts` helpers still use raw `fetch()` with Bearer token — migrate to `fetchAPI`
+
+---
+
+## Loaded automatically via `opencode.json`
 
 - `context/FE_DESIGN_SYSTEM.md` — color tokens, typography, spacing, component specs
 - `context/FE_ARCHITECTURE.md` — file structure, API pattern, wizard form_data schema
