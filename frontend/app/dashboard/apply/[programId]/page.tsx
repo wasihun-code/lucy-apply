@@ -1,19 +1,28 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
-import { getMe } from '@/lib/auth'
-import type {
-  Application,
-  ApplicationDocument,
-  DocumentChecklistItem,
-  PaginatedResponse,
-  Program,
-  AdmissionCycle,
-  UploadUrlResponse,
-  PaymentIntentResponse,
-} from '@/lib/api'
+import { useState } from 'react'
+import { useWizard } from '@/lib/wizard-context'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { Textarea } from '@/components/ui/Textarea'
+import { Button } from '@/components/ui/Button'
+import { Card } from '@/components/ui/Card'
+import { Alert } from '@/components/ui/Alert'
+import { FormField } from '@/components/ui/FormField'
+import { Modal } from '@/components/ui/Modal'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { EducationBlock, type EducationEntry } from '@/components/shared/EducationBlock'
+import { LanguageBlock } from '@/components/shared/LanguageBlock'
+import { DocumentUploadCard } from '@/components/shared/DocumentUploadCard'
+import {
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  Plus,
+  FileText,
+} from 'lucide-react'
+import { formatCurrency } from '@/lib/utils'
+import type { DocumentChecklistItem, ApplicationDocument, Application, Program } from '@/lib/api'
 
 async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `/api/proxy/${path.replace(/^\//, '')}`
@@ -32,638 +41,925 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
   return res.json()
 }
 
-export default function ApplyPage({ params }: { params: { programId: string } }) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const cycleParam = searchParams.get('cycle')
-  const resumingRef = useRef(false)
+export default function WizardSectionPage() {
+  const {
+    currentSection,
+    sections,
+    completedSections,
+    formData,
+    application,
+    program,
+    documents,
+    navigateToSection,
+    updateSectionData,
+    submitApplication,
+    submitting,
+    submittingPhase,
+    submitError,
+    refreshDocuments,
+  } = useWizard()
 
-  const [step, setStep] = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const section = sections.find((s) => s.id === currentSection)
+  if (!section) return null
 
-  const [program, setProgram] = useState<Program | null>(null)
-  const [myApps, setMyApps] = useState<Application[]>([])
-  const [selectedCycle, setSelectedCycle] = useState<string>(cycleParam || '')
-  const [application, setApplication] = useState<Application | null>(null)
-
-  const [formData, setFormData] = useState<Record<string, string>>({})
-  const [documents, setDocuments] = useState<ApplicationDocument[]>([])
-  const [uploading, setUploading] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState<false | 'creating_payment' | 'submitting' | 'polling_payment' | 'success' | 'error'>(false);
-  const [submitError, setSubmitError] = useState<string | null>(null)
-
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    async function init() {
-      const me = await getMe()
-      if (!me) {
-        router.push('/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search))
-        return
-      }
-
-      try {
-        const [prog, appsResp] = await Promise.all([
-          authFetch<Program>(`programs/${params.programId}/`),
-          authFetch<PaginatedResponse<Application>>('applications/'),
-        ])
-        setProgram(prog)
-        setMyApps(appsResp.results)
-
-        if (!cycleParam && prog.open_cycles.length === 1) {
-          setSelectedCycle(prog.open_cycles[0].id)
-        }
-      } catch (e) {
-        setError('Failed to load program details.')
-      } finally {
-        setLoading(false)
-      }
-    }
-    init()
-  }, [params.programId, cycleParam, router])
-
-  useEffect(() => {
-    if (!selectedCycle || loading || resumingRef.current) return
-
-    const existing = myApps.find(
-      (a) => a.program === params.programId && a.admission_cycle === selectedCycle && a.status === 'draft'
-    )
-    if (existing) {
-      resumingRef.current = true
-      setApplication(existing)
-      setFormData((existing.form_data as Record<string, string>) || {})
-      return
-    }
-
-    async function createApp() {
-      try {
-        const app = await authFetch<Application>('applications/', {
-          method: 'POST',
-          body: JSON.stringify({
-            program: params.programId,
-            admission_cycle: selectedCycle,
-          }),
-        })
-        resumingRef.current = true
-        setApplication(app)
-        setFormData(
-          (app.form_data as Record<string, string>) || {}
-        )
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : ''
-        if (msg.includes('permission') || msg.includes('403') || msg.includes('Forbidden')) {
-          setError('Cannot create application. Make sure your email is verified (check your inbox or re-register).')
-        } else {
-          setError('Failed to create application.')
-        }
-      }
-    }
-    createApp()
-  }, [selectedCycle, params.programId, myApps, loading])
-
-  useEffect(() => {
-    const appId = application?.id
-    if (!appId) return
-
-    async function loadApp() {
-      try {
-        const app = await authFetch<Application>(`applications/${appId}/`)
-        setApplication(app)
-        setFormData((app.form_data as Record<string, string>) || {})
-      } catch {
-        // ignore
-      }
-    }
-
-    loadApp()
-  }, [application?.id])
-
-  const autoSave = useCallback(
-    (data: Record<string, string>) => {
-      if (!application?.id) return
-      if (saveTimer.current) clearTimeout(saveTimer.current)
-      saveTimer.current = setTimeout(async () => {
-        setSaving(true)
-        try {
-          const app = await authFetch<Application>(`applications/${application?.id}/`, {
-            method: 'PATCH',
-            body: JSON.stringify({ form_data: data }),
-          })
-          setApplication(app)
-        } catch {
-          // silent fail on auto-save
-        } finally {
-          setSaving(false)
-        }
-      }, 600)
-    },
-    [application?.id]
-  )
-
-  function handleFieldChange(field: string, value: string) {
-    const next = { ...formData, [field]: value }
-    setFormData(next)
-    autoSave(next)
+  function navigatePrev() {
+    const idx = sections.findIndex((s) => s.id === currentSection)
+    if (idx > 0) navigateToSection(sections[idx - 1].id)
   }
 
-  async function refreshApplication() {
-    if (!application?.id) return
-    try {
-      const app = await authFetch<Application>(`applications/${application?.id}/`)
-      setApplication(app)
-    } catch {
-      // ignore
-    }
+  function navigateNext() {
+    const idx = sections.findIndex((s) => s.id === currentSection)
+    if (idx < sections.length - 1) navigateToSection(sections[idx + 1].id)
   }
 
-  async function refreshDocuments() {
-    if (!application?.id) return
-    try {
-      const docs = await authFetch<ApplicationDocument[]>(
-        `applications/${application?.id}/documents/`,
-        { method: 'GET' }
+  const currentIdx = sections.findIndex((s) => s.id === currentSection)
+  const isFirst = currentIdx === 0
+  const isLast = currentIdx === sections.length - 1
+
+  switch (currentSection) {
+    case 'personal':
+      return <PersonalSection formData={formData} updateSectionData={updateSectionData} navigateNext={navigateNext} />
+    case 'contact':
+      return <ContactSection formData={formData} updateSectionData={updateSectionData} navigatePrev={navigatePrev} navigateNext={navigateNext} />
+    case 'education':
+      return <EducationSection formData={formData} updateSectionData={updateSectionData} navigatePrev={navigatePrev} navigateNext={navigateNext} />
+    case 'languages':
+      return <LanguagesSection formData={formData} updateSectionData={updateSectionData} navigatePrev={navigatePrev} navigateNext={navigateNext} />
+    case 'motivation':
+      return <MotivationSection formData={formData} updateSectionData={updateSectionData} navigatePrev={navigatePrev} navigateNext={navigateNext} />
+    case 'documents':
+      return (
+        <DocumentsSection
+          documents={documents}
+          application={application}
+          refreshDocuments={refreshDocuments}
+          navigatePrev={navigatePrev}
+        />
       )
-      setDocuments(docs)
-    } catch {
-      // ignore
-    }
-  }
-
-  useEffect(() => {
-    if (application?.id && step === 2) {
-      refreshDocuments()
-    }
-  }, [application?.id, step])
-
-  async function handlePayAndSubmit() {
-    if (!application?.id || submitting) return
-    setSubmitError(null)
-    setSubmitting('creating_payment')
-    try {
-      await authFetch<PaymentIntentResponse>(
-        `applications/${application.id}/payment-intent/`,
-        { method: 'POST' }
+    case 'checklist':
+      return (
+        <ChecklistSection
+          formData={formData}
+          sections={sections}
+          completedSections={completedSections}
+          application={application}
+          program={program}
+          submitApplication={submitApplication}
+          submitting={submitting}
+          submittingPhase={submittingPhase}
+          submitError={submitError}
+          navigateToSection={navigateToSection}
+        />
       )
-      setSubmitting('submitting')
-      await authFetch<Application>(
-        `applications/${application.id}/submit/`,
-        { method: 'POST' }
-      )
-      router.push(`/dashboard/applications/${application.id}/confirmation`)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Submission failed'
-      setSubmitError(msg)
-      setSubmitting('error')
-    }
+    default:
+      return null
+  }
+}
+
+/* ───── Personal Information ───── */
+
+function PersonalSection({
+  formData,
+  updateSectionData,
+  navigateNext,
+}: {
+  formData: Record<string, unknown>
+  updateSectionData: (id: string, data: unknown) => void
+  navigateNext: () => void
+}) {
+  const d = (formData.personal as Record<string, string>) ?? {}
+
+  function set(field: string, value: string) {
+    updateSectionData('personal', { ...d, [field]: value })
   }
 
-  async function handleUpload(docType: string) {
-    if (!application?.id) return
-    setUploading(docType)
-
-    const fileInput = document.createElement('input')
-    fileInput.type = 'file'
-    fileInput.accept = '.pdf,.jpg,.jpeg,.png,.doc,.docx'
-
-    fileInput.onchange = async () => {
-      const file = fileInput.files?.[0]
-      if (!file) {
-        setUploading(null)
-        return
-      }
-
-      try {
-        const urlResp = await authFetch<UploadUrlResponse>(
-          `applications/${application?.id}/documents/upload-url/`,
-          {
-            method: 'POST',
-            body: JSON.stringify({ document_type: docType }),
-          }
-        )
-
-        const form = new FormData()
-        form.append('document_type', docType)
-        form.append('file', file)
-        form.append('object_key', urlResp.object_key)
-
-        const res = await fetch(`/api/proxy/applications/${application?.id}/documents/`, {
-          method: 'POST',
-          body: form,
-        })
-
-        if (!res.ok) {
-          const text = await res.text()
-          const msg = text.length > 200 ? `Upload failed: HTTP ${res.status}` : text || `Upload failed: HTTP ${res.status}`
-          throw new Error(msg)
-        }
-
-        await refreshApplication()
-        await refreshDocuments()
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Upload failed')
-      } finally {
-        setUploading(null)
-      }
-    }
-
-    fileInput.click()
+  function handleChange(field: string) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      set(field, e.target.value)
   }
-
-  if (loading) {
-    return (
-      <div>
-        <p>Loading program details...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div>
-        <h1>Error</h1>
-        <p style={{ color: 'red' }}>{error}</p>
-        <Link href="/dashboard">Back to Dashboard</Link>
-      </div>
-    )
-  }
-
-  if (!program) {
-    return (
-      <div>
-        <p>Program not found.</p>
-        <Link href="/dashboard">Back to Dashboard</Link>
-      </div>
-    )
-  }
-
-  if (!selectedCycle) {
-    return (
-      <div>
-        <Link href={`/universities/${program.university}/programs/${program.id}`} style={{ fontSize: '0.875rem', display: 'inline-block', marginBottom: '1rem' }}>
-          &larr; Back to Program
-        </Link>
-        <h1>Apply to {program.name}</h1>
-        <h2 style={{ fontSize: '1rem', color: '#666' }}>Select Admission Cycle</h2>
-        <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '400px' }}>
-          {program.open_cycles.map((cycle: AdmissionCycle) => (
-            <button
-              key={cycle.id}
-              onClick={() => setSelectedCycle(cycle.id)}
-              style={{
-                padding: '0.75rem 1rem',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                background: '#fff',
-                cursor: 'pointer',
-                textAlign: 'left',
-                fontSize: '1rem',
-              }}
-            >
-              <strong>{cycle.name}</strong>
-              <br />
-              <span style={{ fontSize: '0.8rem', color: '#666' }}>
-                Open: {new Date(cycle.open_date).toLocaleDateString()} &ndash;{' '}
-                {new Date(cycle.close_date).toLocaleDateString()}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
-  if (!application) {
-    return (
-      <div>
-        <p>Creating your application...</p>
-      </div>
-    )
-  }
-
-  const checklist: DocumentChecklistItem[] = application.document_checklist || []
 
   return (
-    <div>
-      <Link href="/dashboard" style={{ fontSize: '0.875rem', display: 'inline-block', marginBottom: '1rem' }}>
-        &larr; Dashboard
-      </Link>
-
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem' }}>
-        <div>
-          <h1 style={{ margin: 0 }}>Apply: {program.name}</h1>
-          <p style={{ margin: '0.25rem 0 0', color: '#666' }}>{program.university_name}</p>
-        </div>
-        <span
-          style={{
-            fontSize: '0.75rem',
-            padding: '0.2rem 0.5rem',
-            borderRadius: '4px',
-            background: saving ? '#fff3cd' : '#d1e7dd',
-            color: saving ? '#664d03' : '#0f5132',
-          }}
-        >
-          {saving ? 'Saving...' : 'Saved'}
-        </span>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-display font-semibold text-text-900">Personal Information</h2>
+        <p className="text-sm text-text-600 mt-1">
+          Please provide your personal details as they appear on official documents.
+        </p>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.5rem', marginBottom: '2rem' }}>
-        <div
-          style={{
-            padding: '0.4rem 0.8rem',
-            borderRadius: '4px',
-            background: step === 1 ? '#0d6efd' : '#e9ecef',
-            color: step === 1 ? '#fff' : '#666',
-            fontWeight: step === 1 ? 'bold' : 'normal',
-            fontSize: '0.85rem',
-          }}
-        >
-          Step 1: Application Form
+      <Alert variant="info">
+        Please enter your name exactly as it appears on your passport.
+      </Alert>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <FormField label="Given Name" htmlFor="given_name" required>
+            <Input
+              id="given_name"
+              value={d.given_name ?? ''}
+              onChange={handleChange('given_name')}
+              placeholder="Your given name"
+            />
+          </FormField>
+
+          <FormField label="Middle Name" htmlFor="middle_name">
+            <Input
+              id="middle_name"
+              value={d.middle_name ?? ''}
+              onChange={handleChange('middle_name')}
+              placeholder="Optional"
+            />
+          </FormField>
+
+          <FormField label="Family Name" htmlFor="family_name" required>
+            <Input
+              id="family_name"
+              value={d.family_name ?? ''}
+              onChange={handleChange('family_name')}
+              placeholder="Your family name"
+            />
+          </FormField>
+
+          <FormField label="Gender" htmlFor="gender" required>
+            <Select
+              id="gender"
+              value={d.gender ?? ''}
+              onChange={handleChange('gender')}
+            >
+              <option value="">Select gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+              <option value="prefer_not">Prefer not to say</option>
+            </Select>
+          </FormField>
+
+          <FormField label="Citizenship" htmlFor="citizenship" required>
+            <Input
+              id="citizenship"
+              value={d.citizenship ?? ''}
+              onChange={handleChange('citizenship')}
+              placeholder="Country of citizenship"
+            />
+          </FormField>
+
+          <FormField label="Country of Residence" htmlFor="country_of_residence" required>
+            <Input
+              id="country_of_residence"
+              value={d.country_of_residence ?? ''}
+              onChange={handleChange('country_of_residence')}
+              placeholder="Country of residence"
+            />
+          </FormField>
         </div>
-        <div
-          style={{
-            padding: '0.4rem 0.8rem',
-            borderRadius: '4px',
-            background: step === 2 ? '#0d6efd' : '#e9ecef',
-            color: step === 2 ? '#fff' : '#666',
-            fontWeight: step === 2 ? 'bold' : 'normal',
-            fontSize: '0.85rem',
-          }}
-        >
-          Step 2: Documents
-        </div>
-        <div
-          style={{
-            padding: '0.4rem 0.8rem',
-            borderRadius: '4px',
-            background: step === 3 ? '#0d6efd' : '#e9ecef',
-            color: step === 3 ? '#fff' : '#666',
-            fontWeight: step === 3 ? 'bold' : 'normal',
-            fontSize: '0.85rem',
-          }}
-        >
-          Step 3: Review &amp; Submit
+
+        <div className="space-y-4">
+          <FormField label="Date of Birth" htmlFor="date_of_birth" required>
+            <Input
+              id="date_of_birth"
+              type="date"
+              value={d.date_of_birth ?? ''}
+              onChange={handleChange('date_of_birth')}
+            />
+          </FormField>
+
+          <FormField label="Place of Birth" htmlFor="place_of_birth">
+            <Input
+              id="place_of_birth"
+              value={d.place_of_birth ?? ''}
+              onChange={handleChange('place_of_birth')}
+              placeholder="City, Country"
+            />
+          </FormField>
+
+          <FormField
+            label="Passport Number"
+            htmlFor="passport_number"
+            hint="As shown on your passport"
+          >
+            <Input
+              id="passport_number"
+              value={d.passport_number ?? ''}
+              onChange={handleChange('passport_number')}
+              placeholder="Passport number"
+            />
+          </FormField>
+
+          <FormField label="Nationality" htmlFor="nationality">
+            <Input
+              id="nationality"
+              value={d.nationality ?? ''}
+              onChange={handleChange('nationality')}
+              placeholder="Nationality"
+            />
+          </FormField>
         </div>
       </div>
 
-      {step === 1 && (
-        <section>
-          <h2>Personal Information</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', maxWidth: '500px' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Full Name *</label>
-              <input
-                type="text"
-                value={formData['full_name'] || ''}
-                onChange={(e) => handleFieldChange('full_name', e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-                placeholder="Your full name"
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Phone Number</label>
-              <input
-                type="tel"
-                value={formData['phone'] || ''}
-                onChange={(e) => handleFieldChange('phone', e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-                placeholder="+251..."
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Nationality</label>
-              <input
-                type="text"
-                value={formData['nationality'] || ''}
-                onChange={(e) => handleFieldChange('nationality', e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-                placeholder="Your nationality"
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Date of Birth</label>
-              <input
-                type="date"
-                value={formData['date_of_birth'] || ''}
-                onChange={(e) => handleFieldChange('date_of_birth', e.target.value)}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Personal Statement</label>
-              <textarea
-                value={formData['personal_statement'] || ''}
-                onChange={(e) => handleFieldChange('personal_statement', e.target.value)}
-                rows={5}
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem', resize: 'vertical' }}
-                placeholder="Write a brief personal statement..."
-              />
-            </div>
-          </div>
-          <div style={{ marginTop: '2rem' }}>
-            <button
-              onClick={() => setStep(2)}
-              style={{
-                padding: '0.6rem 1.5rem',
-                background: '#0d6efd',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                cursor: 'pointer',
-              }}
-            >
-              Next: Documents &rarr;
-            </button>
-          </div>
-        </section>
-      )}
-
-      {step === 2 && (
-        <section>
-          <h2>Required Documents</h2>
-          <p style={{ color: '#666', marginTop: '0.5rem' }}>
-            Upload the required documents for this program. Supported formats: PDF, JPG, PNG, DOC, DOCX.
-          </p>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '1rem', maxWidth: '500px' }}>
-            {checklist.map((item) => {
-              const doc = documents.find((d) => d.document_type === item.type)
-              const isUploading = uploading === item.type
-              return (
-                <div
-                  key={item.type}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.75rem 1rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    background: item.uploaded ? '#f0f9ff' : '#fff',
-                  }}
-                >
-                  <div>
-                    <strong>{item.label}</strong>
-                    <br />
-                    <span
-                      style={{
-                        fontSize: '0.8rem',
-                        color: item.uploaded
-                          ? item.status === 'verified'
-                            ? '#198754'
-                            : item.status === 'flagged'
-                            ? '#dc3545'
-                            : '#856404'
-                          : '#999',
-                      }}
-                    >
-                      {item.uploaded
-                        ? item.status === 'verified'
-                          ? 'Verified'
-                          : item.status === 'flagged'
-                          ? 'Flagged — re-upload required'
-                          : 'Pending review'
-                        : 'Not uploaded'}
-                    </span>
-                  </div>
-                  <button
-                    onClick={() => handleUpload(item.type)}
-                    disabled={isUploading}
-                    style={{
-                      padding: '0.4rem 0.8rem',
-                      background: isUploading ? '#e9ecef' : item.uploaded ? '#ffc107' : '#0d6efd',
-                      color: isUploading ? '#666' : '#fff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '0.85rem',
-                      cursor: isUploading ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {isUploading ? 'Uploading...' : item.uploaded ? 'Re-upload' : 'Upload'}
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-
-          <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
-            <button
-              onClick={() => setStep(1)}
-              style={{
-                padding: '0.6rem 1.5rem',
-                background: '#6c757d',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                cursor: 'pointer',
-              }}
-            >
-              &larr; Back to Form
-            </button>
-            <button
-              onClick={() => setStep(3)}
-              disabled={!allUploaded(checklist)}
-              style={{
-                padding: '0.6rem 1.5rem',
-                background: allUploaded(checklist) ? '#198754' : '#6c757d',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                cursor: allUploaded(checklist) ? 'pointer' : 'not-allowed',
-              }}
-            >
-              Next: Review &amp; Submit &rarr;
-            </button>
-          </div>
-        </section>
-      )}
-
-      {step === 3 && (
-        <section>
-          <h2>Review &amp; Submit</h2>
-
-          <div style={{ maxWidth: '500px', marginTop: '1rem' }}>
-            <div style={{ padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '1rem' }}>
-              <h3 style={{ margin: '0 0 0.5rem' }}>Program</h3>
-              <p style={{ margin: 0 }}>{program.name}</p>
-              <p style={{ margin: '0.25rem 0 0', color: '#666', fontSize: '0.85rem' }}>{program.university_name}</p>
-            </div>
-
-            <div style={{ padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '1rem' }}>
-              <h3 style={{ margin: '0 0 0.5rem' }}>Documents</h3>
-              {checklist.map((item) => (
-                <p key={item.type} style={{ margin: '0.25rem 0', fontSize: '0.9rem' }}>
-                  {item.label}:{' '}
-                  <span style={{ color: item.status === 'verified' ? '#198754' : '#856404' }}>
-                    {item.status === 'verified' ? 'Verified' : 'Pending review'}
-                  </span>
-                </p>
-              ))}
-            </div>
-
-            <div style={{ padding: '1rem', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '1rem' }}>
-              <h3 style={{ margin: '0 0 0.5rem' }}>Application Fee</h3>
-              <p style={{ margin: 0, fontSize: '1.25rem', fontWeight: 'bold' }}>
-                {program.fee_currency} {program.fee_amount}
-              </p>
-            </div>
-          </div>
-
-          {submitError && (
-            <div style={{ color: '#dc3545', marginBottom: '1rem', padding: '0.5rem', background: '#f8d7da', borderRadius: '4px' }}>
-              {submitError}
-            </div>
-          )}
-
-          <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-            <button
-              onClick={() => setStep(2)}
-              disabled={!!submitting}
-              style={{
-                padding: '0.6rem 1.5rem',
-                background: '#6c757d',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                cursor: !!submitting ? 'not-allowed' : 'pointer',
-              }}
-            >
-              &larr; Back to Documents
-            </button>
-            <button
-              onClick={handlePayAndSubmit}
-              disabled={!!submitting}
-              style={{
-                padding: '0.6rem 1.5rem',
-                background: submitting && submitting !== 'error' ? '#6c757d' : '#198754',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '1rem',
-                cursor: submitting && submitting !== 'error' ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {submitting === 'creating_payment'
-                ? 'Creating payment...'
-                : submitting === 'submitting'
-                ? 'Submitting...'
-                : submitting === 'error'
-                ? 'Try Again'
-                : `Pay ${program.fee_currency} ${program.fee_amount} & Submit`}
-            </button>
-          </div>
-        </section>
-      )}
-
+      <div className="flex justify-end pt-4 border-t border-border">
+        <Button onClick={navigateNext}>Next: Contact Details &rarr;</Button>
+      </div>
     </div>
   )
 }
 
-function allUploaded(checklist: DocumentChecklistItem[]): boolean {
-  return checklist.length > 0 && checklist.every((item) => item.uploaded)
+/* ───── Contact Details ───── */
+
+function ContactSection({
+  formData,
+  updateSectionData,
+  navigatePrev,
+  navigateNext,
+}: {
+  formData: Record<string, unknown>
+  updateSectionData: (id: string, data: unknown) => void
+  navigatePrev: () => void
+  navigateNext: () => void
+}) {
+  const d = (formData.contact as Record<string, string>) ?? {}
+
+  function set(field: string, value: string) {
+    updateSectionData('contact', { ...d, [field]: value })
+  }
+
+  function handleChange(field: string) {
+    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      set(field, e.target.value)
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-display font-semibold text-text-900">Contact Details</h2>
+        <p className="text-sm text-text-600 mt-1">
+          How can the university reach you?
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <FormField label="Email Address" htmlFor="email">
+            <div className="flex items-center gap-2 h-10 bg-background border border-border rounded px-3 text-sm text-text-600">
+              <span className="flex-1 truncate">Email from account</span>
+              <CheckCircle size={14} className="text-success shrink-0" />
+            </div>
+          </FormField>
+
+          <FormField label="Street Address" htmlFor="street_address" required>
+            <Input
+              id="street_address"
+              value={d.street_address ?? ''}
+              onChange={handleChange('street_address')}
+              placeholder="Street address"
+            />
+          </FormField>
+
+          <FormField label="City / Town" htmlFor="city" required>
+            <Input
+              id="city"
+              value={d.city ?? ''}
+              onChange={handleChange('city')}
+              placeholder="City or town"
+            />
+          </FormField>
+
+          <FormField label="Postal Code" htmlFor="postal_code" required>
+            <Input
+              id="postal_code"
+              value={d.postal_code ?? ''}
+              onChange={handleChange('postal_code')}
+              placeholder="Postal code"
+            />
+          </FormField>
+
+          <FormField label="Country" htmlFor="country" required>
+            <Select
+              id="country"
+              value={d.country ?? ''}
+              onChange={handleChange('country')}
+            >
+              <option value="">Select country</option>
+              <option value="ET">Ethiopia</option>
+              <option value="US">United States</option>
+              <option value="UK">United Kingdom</option>
+              <option value="CA">Canada</option>
+              <option value="AU">Australia</option>
+              <option value="DE">Germany</option>
+              <option value="KE">Kenya</option>
+              <option value="ZA">South Africa</option>
+              <option value="other">Other</option>
+            </Select>
+          </FormField>
+        </div>
+
+        <div className="space-y-4">
+          <FormField label="Country Code" htmlFor="mobile_country_code" required>
+            <Select
+              id="mobile_country_code"
+              value={d.mobile_country_code ?? ''}
+              onChange={handleChange('mobile_country_code')}
+            >
+              <option value="">Code</option>
+              <option value="+251">+251 (Ethiopia)</option>
+              <option value="+1">+1 (US/Canada)</option>
+              <option value="+44">+44 (UK)</option>
+              <option value="+91">+91 (India)</option>
+              <option value="+254">+254 (Kenya)</option>
+              <option value="+27">+27 (South Africa)</option>
+              <option value="+49">+49 (Germany)</option>
+            </Select>
+          </FormField>
+
+          <FormField label="Mobile Number" htmlFor="mobile_number" required>
+            <Input
+              id="mobile_number"
+              type="tel"
+              value={d.mobile_number ?? ''}
+              onChange={handleChange('mobile_number')}
+              placeholder="Mobile number"
+            />
+          </FormField>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={navigatePrev}>&larr; Personal Information</Button>
+        <Button onClick={navigateNext}>Next: Education &rarr;</Button>
+      </div>
+    </div>
+  )
+}
+
+/* ───── Education ───── */
+
+function EducationSection({
+  formData,
+  updateSectionData,
+  navigatePrev,
+  navigateNext,
+}: {
+  formData: Record<string, unknown>
+  updateSectionData: (id: string, data: unknown) => void
+  navigatePrev: () => void
+  navigateNext: () => void
+}) {
+  const entries = (formData.education as EducationEntry[]) ?? []
+
+  function setEntries(next: EducationEntry[]) {
+    updateSectionData('education', next)
+  }
+
+  function handleChange(index: number, field: string, value: string) {
+    const next = entries.map((e, i) =>
+      i === index ? { ...e, [field]: value } : e,
+    )
+    setEntries(next)
+  }
+
+  function addEntry() {
+    setEntries([...entries, {}])
+  }
+
+  function moveUp(index: number) {
+    if (index === 0) return
+    const next = [...entries]
+    ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
+    setEntries(next)
+  }
+
+  function moveDown(index: number) {
+    if (index === entries.length - 1) return
+    const next = [...entries]
+    ;[next[index], next[index + 1]] = [next[index + 1], next[index]]
+    setEntries(next)
+  }
+
+  function removeEntry(index: number) {
+    setEntries(entries.filter((_, i) => i !== index))
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-display font-semibold text-text-900">Education</h2>
+        <p className="text-sm text-text-600 mt-1">
+          List your educational background, starting with the most recent.
+        </p>
+      </div>
+
+      {entries.length === 0 && (
+        <Card padding="md">
+          <p className="text-sm text-text-400 text-center py-4">
+            No education entries yet. Add your first entry below.
+          </p>
+        </Card>
+      )}
+
+      <div className="space-y-4">
+        {entries.map((entry, i) => (
+          <EducationBlock
+            key={i}
+            entry={entry}
+            index={i}
+            totalCount={entries.length}
+            onChange={handleChange}
+            onMoveUp={moveUp}
+            onMoveDown={moveDown}
+            onDelete={removeEntry}
+          />
+        ))}
+      </div>
+
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={addEntry}
+        icon={<Plus size={14} />}
+      >
+        Add education entry
+      </Button>
+
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={navigatePrev}>&larr; Contact Details</Button>
+        <Button onClick={navigateNext}>Next: Languages &rarr;</Button>
+      </div>
+    </div>
+  )
+}
+
+/* ───── Languages ───── */
+
+function LanguagesSection({
+  formData,
+  updateSectionData,
+  navigatePrev,
+  navigateNext,
+}: {
+  formData: Record<string, unknown>
+  updateSectionData: (id: string, data: unknown) => void
+  navigatePrev: () => void
+  navigateNext: () => void
+}) {
+  const d = (formData.languages as {
+    native?: string
+    foreign?: Array<Record<string, string>>
+  }) ?? { foreign: [] }
+
+  const foreign = d.foreign ?? []
+
+  function updateLang(field: string, value: string) {
+    updateSectionData('languages', { ...d, [field]: value })
+  }
+
+  function setForeign(next: Array<Record<string, string>>) {
+    updateSectionData('languages', { ...d, foreign: next })
+  }
+
+  function handleChange(index: number, field: string, value: string) {
+    const next = foreign.map((e, i) =>
+      i === index ? { ...e, [field]: value } : e,
+    )
+    setForeign(next)
+  }
+
+  function addEntry() {
+    setForeign([...foreign, {}])
+  }
+
+  function moveUp(index: number) {
+    if (index === 0) return
+    const next = [...foreign]
+    ;[next[index - 1], next[index]] = [next[index], next[index - 1]]
+    setForeign(next)
+  }
+
+  function moveDown(index: number) {
+    if (index === foreign.length - 1) return
+    const next = [...foreign]
+    ;[next[index], next[index + 1]] = [next[index + 1], next[index]]
+    setForeign(next)
+  }
+
+  function removeEntry(index: number) {
+    setForeign(foreign.filter((_, i) => i !== index))
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-display font-semibold text-text-900">Languages</h2>
+        <p className="text-sm text-text-600 mt-1">
+          Please describe your foreign language skills. If you have taken any relevant tests,
+          list the tests and associated scores.
+        </p>
+      </div>
+
+      <FormField label="Native Language" htmlFor="native_lang" required>
+        <Select
+          id="native_lang"
+          value={d.native ?? ''}
+          onChange={(e) => updateLang('native', e.target.value)}
+        >
+          <option value="">Select language</option>
+          <option value="amharic">Amharic</option>
+          <option value="english">English</option>
+          <option value="french">French</option>
+          <option value="arabic">Arabic</option>
+          <option value="spanish">Spanish</option>
+          <option value="german">German</option>
+          <option value="other">Other</option>
+        </Select>
+      </FormField>
+
+      <div className="space-y-4">
+        {foreign.map((entry, i) => (
+          <LanguageBlock
+            key={i}
+            entry={entry}
+            index={i}
+            totalCount={foreign.length}
+            onChange={handleChange}
+            onMoveUp={moveUp}
+            onMoveDown={moveDown}
+            onDelete={removeEntry}
+          />
+        ))}
+      </div>
+
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={addEntry}
+        icon={<Plus size={14} />}
+      >
+        Add language
+      </Button>
+
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={navigatePrev}>&larr; Education</Button>
+        <Button onClick={navigateNext}>Next: Motivation &rarr;</Button>
+      </div>
+    </div>
+  )
+}
+
+/* ───── Motivation ───── */
+
+function MotivationSection({
+  formData,
+  updateSectionData,
+  navigatePrev,
+  navigateNext,
+}: {
+  formData: Record<string, unknown>
+  updateSectionData: (id: string, data: unknown) => void
+  navigatePrev: () => void
+  navigateNext: () => void
+}) {
+  const d = (formData.motivation as { personal_statement?: string }) ?? {}
+  const text = d.personal_statement ?? ''
+  const charCount = text.length
+
+  function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
+    updateSectionData('motivation', { personal_statement: e.target.value })
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-display font-semibold text-text-900">Motivation</h2>
+        <p className="text-sm text-text-600 mt-1">
+          Please provide a personal statement explaining your motivation for applying to this
+          program and how it relates to your academic background and career goals.
+        </p>
+      </div>
+
+      <FormField label="Personal Statement" htmlFor="personal_statement">
+        <Textarea
+          id="personal_statement"
+          rows={10}
+          maxLength={3000}
+          value={text}
+          onChange={handleChange}
+          placeholder="Your personal statement..."
+        />
+        <p
+          className={`text-xs mt-1 ${
+            charCount > 2700 ? 'text-warning' : 'text-text-400'
+          }`}
+        >
+          {charCount}/3000
+        </p>
+      </FormField>
+
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={navigatePrev}>&larr; Languages</Button>
+        <Button onClick={navigateNext}>Next: Documents &rarr;</Button>
+      </div>
+    </div>
+  )
+}
+
+/* ───── Documents ───── */
+
+function DocumentsSection({
+  documents,
+  application,
+  refreshDocuments,
+  navigatePrev,
+}: {
+  documents: ApplicationDocument[]
+  application: Application | null
+  refreshDocuments: () => Promise<void>
+  navigatePrev: () => void
+}) {
+  const [uploading, setUploading] = useState<string | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  const checklist = (application?.document_checklist ?? []) as DocumentChecklistItem[]
+  const appId = application?.id
+
+  async function handleUpload(docType: string, file: File) {
+    if (!appId) return
+    setUploading(docType)
+    setUploadError(null)
+
+    try {
+      const urlResp = await authFetch<{ upload_url: string | null; object_key: string }>(
+        `applications/${appId}/documents/upload-url/`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ document_type: docType }),
+        },
+      )
+
+      const form = new FormData()
+      form.append('document_type', docType)
+      form.append('file', file)
+      form.append('object_key', urlResp.object_key)
+
+      const res = await fetch(
+        `/api/proxy/applications/${appId}/documents/`,
+        {
+          method: 'POST',
+          body: form,
+        },
+      )
+
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text.length > 200 ? 'Upload failed' : text)
+      }
+
+      await refreshDocuments()
+    } catch (e) {
+      setUploadError(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploading(null)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-display font-semibold text-text-900">Documents</h2>
+        <p className="text-sm text-text-600 mt-1">
+          Please upload the required documents for this application. Accepted formats: PDF, JPG,
+          PNG, DOC, DOCX. Maximum 10MB per file.
+        </p>
+      </div>
+
+      {uploadError && (
+        <Alert variant="danger">{uploadError}</Alert>
+      )}
+
+      {checklist.length === 0 ? (
+        <Card padding="md">
+          <p className="text-sm text-text-400 text-center py-4">
+            No documents required for this program.
+          </p>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {checklist.map((item) => {
+            const doc = documents.find(
+              (d) => d.document_type === item.type,
+            )
+            return (
+              <DocumentUploadCard
+                key={item.type}
+                item={item}
+                document={doc ?? null}
+                isUploading={uploading === item.type}
+                onUpload={handleUpload}
+              />
+            )
+          })}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-4 border-t border-border">
+        <Button variant="ghost" onClick={navigatePrev}>&larr; Motivation</Button>
+      </div>
+    </div>
+  )
+}
+
+/* ───── Checklist ───── */
+
+function ChecklistSection({
+  formData,
+  sections,
+  completedSections,
+  application,
+  program,
+  submitApplication,
+  submitting,
+  submittingPhase,
+  submitError,
+  navigateToSection,
+}: {
+  formData: Record<string, unknown>
+  sections: Array<{ id: string; label: string; required: boolean }>
+  completedSections: Set<string>
+  application: Application | null
+  program: Program | null
+  submitApplication: () => Promise<void>
+  submitting: boolean
+  submittingPhase: string
+  submitError: string | null
+  navigateToSection: (id: string) => void
+}) {
+  const [showConfirm, setShowConfirm] = useState(false)
+  const document_checklist = (application?.document_checklist ?? []) as DocumentChecklistItem[]
+
+  const allDataSectionsComplete = sections
+    .filter((s) => s.required && s.id !== 'checklist' && s.id !== 'documents')
+    .every((s) => completedSections.has(s.id))
+
+  const allDocumentsUploaded =
+    document_checklist.length === 0 || document_checklist.every((d) => d.uploaded)
+
+  const isReadyToSubmit = allDataSectionsComplete && allDocumentsUploaded
+
+  function submitButtonLabel(): string {
+    if (submittingPhase === 'creating_payment') return 'Creating payment...'
+    if (submittingPhase === 'submitting') return 'Submitting...'
+    if (submittingPhase === 'error') return 'Try Again'
+    const amount = program?.fee_amount
+    const currency = program?.fee_currency
+    if (amount && currency) {
+      return `Pay ${currency} ${amount} & Submit Application`
+    }
+    return 'Submit Application'
+  }
+
+  function sectionStatusIcon(sectionId: string) {
+    const section = sections.find((s) => s.id === sectionId)
+    if (!section) return null
+    if (completedSections.has(sectionId)) {
+      return { icon: CheckCircle, className: 'text-success' }
+    }
+    if (section.required) {
+      return { icon: XCircle, className: 'text-danger' }
+    }
+    return { icon: AlertTriangle, className: 'text-warning' }
+  }
+
+  function documentStatus(item: DocumentChecklistItem) {
+    if (!item.uploaded) return { icon: XCircle, className: 'text-danger', label: 'Not uploaded' }
+    if (item.status === 'verified') return { icon: CheckCircle, className: 'text-success', label: 'Verified' }
+    if (item.status === 'flagged') return { icon: XCircle, className: 'text-danger', label: 'Flagged' }
+    return { icon: AlertTriangle, className: 'text-warning', label: 'Pending' }
+  }
+
+  const formSections = sections.filter(
+    (s) => s.id !== 'checklist' && s.id !== 'documents',
+  )
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-display font-semibold text-text-900">Checklist</h2>
+        <p className="text-sm text-text-600 mt-1">
+          Review your application before submitting. All required items must be complete.
+        </p>
+      </div>
+
+      {/* Section completion checklist */}
+      <Card padding="md">
+        <h3 className="text-base font-display font-semibold text-text-900 mb-3">Sections</h3>
+        <div className="space-y-2">
+          {formSections.map((section) => {
+            const { icon: Icon, className } = sectionStatusIcon(section.id) ?? {}
+            return (
+              <button
+                key={section.id}
+                onClick={() => navigateToSection(section.id)}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded hover:bg-background transition-colors text-left"
+              >
+                {Icon && <Icon size={16} className={className} />}
+                <span className="text-sm text-text-900 flex-1">{section.label}</span>
+                <span className="text-xs text-text-400">
+                  {completedSections.has(section.id) ? 'Complete' : section.required ? 'Incomplete' : 'Optional'}
+                </span>
+              </button>
+            )
+          })}
+
+          {/* Document checklist item inline */}
+          <div className="flex items-center gap-3 px-3 py-2">
+            {allDocumentsUploaded
+              ? <CheckCircle size={16} className="text-success" />
+              : <XCircle size={16} className="text-danger" />
+            }
+            <span className="text-sm text-text-900 flex-1">Documents</span>
+            <span className="text-xs text-text-400">
+              {allDocumentsUploaded ? 'Complete' : 'Incomplete'}
+            </span>
+          </div>
+        </div>
+      </Card>
+
+      {/* Document checklist */}
+      {document_checklist.length > 0 && (
+        <Card padding="md">
+          <h3 className="text-base font-display font-semibold text-text-900 mb-3">Uploaded Documents</h3>
+          <div className="space-y-2">
+            {document_checklist.map((item) => {
+              const { icon: Icon, className, label } = documentStatus(item)
+              return (
+                <div key={item.type} className="flex items-center gap-3 px-3 py-2">
+                  <Icon size={16} className={className} />
+                  <span className="text-sm text-text-900 flex-1">{item.label}</span>
+                  <span className="text-xs text-text-400">{label}</span>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Readiness banner */}
+      {isReadyToSubmit ? (
+        <Alert variant="success">Your application is ready to submit.</Alert>
+      ) : (
+        <Alert variant="danger">
+          Please complete all required sections before submitting.
+        </Alert>
+      )}
+
+      {submitError && (
+        <Alert variant="danger">{submitError}</Alert>
+      )}
+
+      {/* Submit button */}
+      <Button
+        variant="primary"
+        size="lg"
+        className="w-full mt-6"
+        disabled={!isReadyToSubmit || submitting}
+        loading={submitting}
+        onClick={() => setShowConfirm(true)}
+      >
+        {submitButtonLabel()}
+      </Button>
+
+      {/* Confirmation modal */}
+      <Modal
+        open={showConfirm}
+        onClose={() => !submitting && setShowConfirm(false)}
+        title="Confirm Submission"
+      >
+        <p className="text-sm text-text-600 mb-4">
+          Submit your application to{' '}
+          <strong>{program?.name}</strong>?
+          This will charge the application fee.
+        </p>
+        {submitError && (
+          <Alert variant="danger" className="mb-4">{submitError}</Alert>
+        )}
+        <div className="flex justify-end gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => setShowConfirm(false)}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            loading={submitting}
+            onClick={() => {
+              submitApplication()
+            }}
+          >
+            {submittingPhase === 'creating_payment'
+              ? 'Processing Payment...'
+              : 'Confirm & Submit'}
+          </Button>
+        </div>
+      </Modal>
+    </div>
+  )
 }
