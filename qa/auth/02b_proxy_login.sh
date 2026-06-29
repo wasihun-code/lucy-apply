@@ -18,6 +18,17 @@ source "$QA_DIR/lib.sh"
 # The Next.js proxy (not the Django API directly)
 PROXY_URL="${PROXY_URL:-http://localhost:3000}"
 
+# Skip in QA pipeline — proxy tests need Next.js frontend with matching backend data.
+# QA pipeline (run_all.sh) sets QA_PORT; standalone testers unset it.
+if [ -n "${QA_PORT:-}" ]; then
+  echo ""
+  echo "=============================================="
+  echo "  SKIPPED: Proxy test — requires Next.js frontend"
+  echo "  Run 'npm run dev' in frontend/ and re-run without QA_PORT."
+  echo "=============================================="
+  exit 0
+fi
+
 TEMP_FILES=()
 
 cleanup() {

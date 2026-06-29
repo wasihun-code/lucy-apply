@@ -2,8 +2,20 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { getMe } from '@/lib/auth'
+import { formatDate } from '@/lib/utils'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Alert } from '@/components/ui/Alert'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Modal } from '@/components/ui/Modal'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { Skeleton } from '@/components/ui/Skeleton'
+import {
+  FileText,
+  Download,
+  Upload,
+} from 'lucide-react'
 import type {
   Application,
   ApplicationDocument,
@@ -12,7 +24,10 @@ import type {
   UploadUrlResponse,
 } from '@/lib/api'
 
-async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function authFetch<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const url = `/api/proxy/${path.replace(/^\//, '')}`
   const res = await fetch(url, {
     ...options,
@@ -23,7 +38,8 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
   })
   if (!res.ok) {
     const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    const msg =
+      text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
     throw new Error(msg)
   }
   return res.json()
@@ -37,7 +53,11 @@ export default function ApplicationDetailPage() {
   const [documents, setDocuments] = useState<ApplicationDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [responding, setResponding] = useState<'accepted' | 'declined' | null>(null)
+  const [showOfferModal, setShowOfferModal] = useState(false)
+  const [pendingResponse, setPendingResponse] = useState<
+    'accepted' | 'declined' | null
+  >(null)
+  const [responding, setResponding] = useState(false)
   const [respondError, setRespondError] = useState<string | null>(null)
   const [uploading, setUploading] = useState<string | null>(null)
 
@@ -45,25 +65,28 @@ export default function ApplicationDetailPage() {
     async function load() {
       const me = await getMe()
       if (!me) {
-        router.push('/login?redirect=' + encodeURIComponent(window.location.pathname))
+        router.push(
+          '/login?redirect=' + encodeURIComponent(window.location.pathname),
+        )
         return
       }
 
       try {
-        const [app, hist] = await Promise.all([
+        const [app, hist, docs] = await Promise.all([
           authFetch<Application>(`applications/${params.id}/`),
           authFetch<HistoryItem[]>(`applications/${params.id}/history/`),
+          authFetch<ApplicationDocument[]>(
+            `applications/${params.id}/documents/`,
+            { method: 'GET' },
+          ),
         ])
         setApplication(app)
         setHistory(hist || [])
-
-        const docs = await authFetch<ApplicationDocument[]>(
-          `applications/${params.id}/documents/`,
-          { method: 'GET' }
-        )
         setDocuments(docs || [])
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to load application')
+        setError(
+          e instanceof Error ? e.message : 'Failed to load application',
+        )
       } finally {
         setLoading(false)
       }
@@ -81,35 +104,43 @@ export default function ApplicationDetailPage() {
     }
   }
 
-  const checklist: DocumentChecklistItem[] = application?.document_checklist || []
+  function handleOfferClick(response: 'accepted' | 'declined') {
+    setPendingResponse(response)
+    setRespondError(null)
+    setShowOfferModal(true)
+  }
 
-  async function handleOfferResponse(response: 'accepted' | 'declined') {
-    if (!application?.id || responding) return
-    setResponding(response)
+  async function confirmOfferResponse() {
+    if (!application?.id || !pendingResponse || responding) return
+    setResponding(true)
     setRespondError(null)
     try {
       const updated = await authFetch<Application>(
         `applications/${application.id}/offer-response/`,
         {
           method: 'POST',
-          body: JSON.stringify({ response }),
-        }
+          body: JSON.stringify({ response: pendingResponse }),
+        },
       )
       setApplication(updated)
-      setHistory([
-        ...history,
+      setHistory((prev) => [
         {
           from_status: 'admitted',
-          to_status: response,
+          to_status: pendingResponse,
           changed_by_type: 'applicant',
-          reason: `Applicant ${response} the offer`,
+          reason: `Applicant ${pendingResponse} the offer`,
           created_at: new Date().toISOString(),
         },
+        ...prev,
       ])
+      setShowOfferModal(false)
+      setPendingResponse(null)
     } catch (e) {
-      setRespondError(e instanceof Error ? e.message : 'Failed to respond')
+      setRespondError(
+        e instanceof Error ? e.message : 'Failed to respond',
+      )
     } finally {
-      setResponding(null)
+      setResponding(false)
     }
   }
 
@@ -134,7 +165,7 @@ export default function ApplicationDetailPage() {
           {
             method: 'POST',
             body: JSON.stringify({ document_type: docType }),
-          }
+          },
         )
 
         const form = new FormData()
@@ -142,21 +173,27 @@ export default function ApplicationDetailPage() {
         form.append('file', file)
         form.append('object_key', urlResp.object_key)
 
-        const res = await fetch(`/api/proxy/applications/${application.id}/documents/`, {
-          method: 'POST',
-          body: form,
-        })
+        const res = await fetch(
+          `/api/proxy/applications/${application.id}/documents/`,
+          {
+            method: 'POST',
+            body: form,
+          },
+        )
 
         if (!res.ok) {
           const text = await res.text()
-          const msg = text.length > 200 ? `Upload failed: HTTP ${res.status}` : text || `Upload failed: HTTP ${res.status}`
+          const msg =
+            text.length > 200
+              ? `Upload failed: HTTP ${res.status}`
+              : text || `Upload failed: HTTP ${res.status}`
           throw new Error(msg)
         }
 
         await refreshApplication()
         const docs = await authFetch<ApplicationDocument[]>(
           `applications/${application.id}/documents/`,
-          { method: 'GET' }
+          { method: 'GET' },
         )
         setDocuments(docs || [])
       } catch (e) {
@@ -170,227 +207,286 @@ export default function ApplicationDetailPage() {
   }
 
   if (loading) {
-    return <p>Loading...</p>
+    return <ApplicationDetailSkeleton />
   }
 
   if (error) {
     return (
-      <div>
-        <h1>Error</h1>
-        <p style={{ color: 'red' }}>{error}</p>
-        <Link href="/dashboard">Back to Dashboard</Link>
+      <div className="space-y-4">
+        <Alert variant="danger">{error}</Alert>
+        <Button variant="ghost" onClick={() => router.push('/dashboard')}>
+          &larr; Back to Dashboard
+        </Button>
       </div>
     )
   }
 
   if (!application) {
     return (
-      <div>
-        <p>Application not found.</p>
-        <Link href="/dashboard">Back to Dashboard</Link>
+      <div className="space-y-4">
+        <Alert variant="info">Application not found.</Alert>
+        <Button variant="ghost" onClick={() => router.push('/dashboard')}>
+          &larr; Back to Dashboard
+        </Button>
       </div>
     )
   }
 
+  const checklist: DocumentChecklistItem[] =
+    application.document_checklist || []
+  const fd = application.form_data || {}
+  const hasFormData = Object.keys(fd).length > 0
+
+  const borderColor = (() => {
+    switch (application.status) {
+      case 'admitted':
+        return 'border-l-accent'
+      case 'accepted':
+        return 'border-l-success'
+      case 'rejected':
+        return 'border-l-danger'
+      case 'draft':
+        return ''
+      default:
+        return 'border-l-primary/20'
+    }
+  })()
+
   return (
-    <div>
-      <Link href="/dashboard" style={{ fontSize: '0.875rem', display: 'inline-block', marginBottom: '1rem' }}>
-        &larr; Dashboard
-      </Link>
+    <div className="space-y-6 pb-8">
+      <PageHeader
+        title={application.program_name}
+        description={application.university_name}
+        breadcrumb={[
+          { label: 'Dashboard', href: '/dashboard' },
+          { label: application.program_name, href: '#' },
+        ]}
+      />
 
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem' }}>
-        <div>
-          <h1 style={{ margin: 0 }}>{application.program_name}</h1>
-          <p style={{ margin: '0.25rem 0 0', color: '#666' }}>{application.university_name}</p>
-        </div>
-        <span
-          style={{
-            fontSize: '0.75rem',
-            padding: '0.3rem 0.6rem',
-            borderRadius: '4px',
-            background: statusBg(application.status),
-            color: statusColor(application.status),
-            fontWeight: 600,
-          }}
+      {/* Status banner */}
+      {application.status !== 'draft' && (
+        <Card
+          padding="md"
+          className={cn(
+            'border-l-4',
+            application.status === 'admitted' && 'border-l-accent',
+            application.status === 'accepted' && 'border-l-success',
+            application.status === 'rejected' && 'border-l-danger',
+            application.status === 'waitlisted' && 'border-l-warning',
+            application.status === 'under_review' && 'border-l-primary/20',
+            application.status === 'submitted' && 'border-l-primary/20',
+          )}
         >
-          {application.status.replace(/_/g, ' ')}
-        </span>
-      </div>
-
-      {/* Application Data */}
-      <section style={{ marginTop: '2rem' }}>
-        <h2>Application Data</h2>
-        <div style={{ maxWidth: '500px' }}>
-          {Object.entries(application.form_data || {}).map(([key, value]) => (
-            <div key={key} style={{ marginBottom: '0.5rem', padding: '0.5rem', background: '#f8f9fa', borderRadius: '4px' }}>
-              <strong style={{ fontSize: '0.8rem', color: '#666', textTransform: 'capitalize' }}>
-                {key.replace(/_/g, ' ')}
-              </strong>
-              <p style={{ margin: '0.25rem 0 0' }}>{String(value)}</p>
+          <div className="flex items-center gap-3">
+            <StatusBadge status={application.status} />
+            <div className="text-sm text-text-600">
+              {statusDescription(application.status)}
             </div>
-          ))}
-        </div>
-      </section>
+            {application.submitted_at && (
+              <span className="text-xs text-text-400 ml-auto">
+                Submitted {formatDate(application.submitted_at)}
+              </span>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Offer response */}
+      {application.status === 'admitted' && !application.offer_response_at && (
+        <Card className="border-accent border-2" padding="md">
+          <h3 className="text-xl font-display font-semibold text-accent">
+            You&apos;ve been admitted!
+          </h3>
+          <p className="text-sm text-text-600 mt-2">
+            Congratulations! You have been offered admission to{' '}
+            {application.program_name} at {application.university_name}. Please
+            review and respond to your offer.
+          </p>
+          <div className="flex gap-3 mt-4">
+            <Button onClick={() => handleOfferClick('accepted')}>
+              Accept Offer
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => handleOfferClick('declined')}
+            >
+              Decline Offer
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {application.offer_response_at && (
+        <Card padding="md">
+          <p className="text-sm text-text-600">
+            You {application.status === 'accepted' ? 'accepted' : 'declined'}{' '}
+            this offer on {formatDate(application.offer_response_at)}.
+          </p>
+        </Card>
+      )}
+
+      {/* Application Information */}
+      {hasFormData && (
+        <Card padding="md">
+          <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+            Application Information
+          </h2>
+          <dl className="space-y-6">{renderFormData(fd)}</dl>
+        </Card>
+      )}
 
       {/* Documents */}
-      <section style={{ marginTop: '2rem' }}>
-        <h2>Documents</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '500px' }}>
-          {checklist.length === 0 ? (
-            <p style={{ color: '#666' }}>No documents required for this program.</p>
-          ) : (
-            checklist.map((item) => {
+      <Card padding="md">
+        <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+          Documents
+        </h2>
+        {checklist.length === 0 ? (
+          <p className="text-sm text-text-600">
+            No documents required for this program.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {checklist.map((item) => {
+              const flaggedDoc =
+                item.status === 'flagged'
+                  ? documents.find(
+                      (d) =>
+                        d.document_type === item.type &&
+                        d.status === 'flagged',
+                    )
+                  : null
               const isUploading = uploading === item.type
-              const flaggedDoc = item.status === 'flagged'
-                ? documents.find((d) => d.document_type === item.type && d.status === 'flagged')
-                : null
+
               return (
                 <div
                   key={item.type}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    padding: '0.75rem 1rem',
-                    border: '1px solid #ddd',
-                    borderRadius: '6px',
-                    background: item.uploaded ? '#f0f9ff' : '#fff',
-                  }}
+                  className="flex items-center justify-between p-4 bg-background rounded-lg"
                 >
-                  <div>
-                    <strong>{item.label}</strong>
-                    <br />
-                    <span style={{ fontSize: '0.8rem', color: docStatusColor(item) }}>
-                      {docStatusLabel(item, flaggedDoc)}
-                    </span>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText
+                      size={16}
+                      className="shrink-0 text-text-400"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-text-900 truncate">
+                        {item.label}
+                      </p>
+                      {flaggedDoc?.flagged_reason && (
+                        <p className="text-xs text-danger mt-0.5">
+                          {flaggedDoc.flagged_reason}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {flaggedDoc ? (
-                    <button
-                      onClick={() => handleUpload(item.type)}
-                      disabled={isUploading}
-                      style={{
-                        padding: '0.4rem 0.8rem',
-                        background: isUploading ? '#e9ecef' : '#ffc107',
-                        color: isUploading ? '#666' : '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        fontSize: '0.85rem',
-                        cursor: isUploading ? 'not-allowed' : 'pointer',
-                      }}
-                    >
-                      {isUploading ? 'Uploading...' : 'Re-upload'}
-                    </button>
-                  ) : null}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <StatusBadge
+                      status={
+                        flaggedDoc
+                          ? 'flagged'
+                          : item.status || (item.uploaded ? 'pending' : 'draft')
+                      }
+                    />
+                    {flaggedDoc && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUpload(item.type)}
+                        disabled={isUploading}
+                        icon={isUploading ? undefined : <Upload size={14} />}
+                      >
+                        {isUploading ? 'Uploading...' : 'Re-upload'}
+                      </Button>
+                    )}
+                  </div>
                 </div>
               )
-            })
-          )}
-        </div>
-      </section>
-
-      {/* Decision Notice */}
-      {['admitted', 'rejected', 'waitlisted'].includes(application.status) && (
-        <section style={{ marginTop: '2rem' }}>
-          <h2>Decision</h2>
-          <div style={{
-            padding: '1rem',
-            borderRadius: '6px',
-            background: application.status === 'admitted' ? '#d1e7dd'
-              : application.status === 'rejected' ? '#f8d7da' : '#fff3cd',
-            maxWidth: '500px',
-          }}>
-            <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>
-              {application.status === 'admitted' ? 'Admitted' : statusLabel(application.status)}
-            </p>
-            {application.decision_at && (
-              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#666' }}>
-                {new Date(application.decision_at).toLocaleDateString()}
-              </p>
-            )}
+            })}
           </div>
+        )}
+      </Card>
 
-          {application.status === 'admitted' && !application.offer_response_at && (
-            <div style={{ marginTop: '1rem', display: 'flex', gap: '1rem' }}>
-              <button
-                onClick={() => handleOfferResponse('accepted')}
-                disabled={!!responding}
-                style={{
-                  padding: '0.6rem 1.5rem',
-                  background: responding ? '#6c757d' : '#198754',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '1rem',
-                  cursor: responding ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {responding === 'accepted' ? 'Accepting...' : 'Accept Offer'}
-              </button>
-              <button
-                onClick={() => handleOfferResponse('declined')}
-                disabled={!!responding}
-                style={{
-                  padding: '0.6rem 1.5rem',
-                  background: responding ? '#6c757d' : '#dc3545',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '6px',
-                  fontSize: '1rem',
-                  cursor: responding ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {responding === 'declined' ? 'Declining...' : 'Decline Offer'}
-              </button>
-            </div>
-          )}
-
-          {application.offer_response_at && (
-            <p style={{ marginTop: '0.75rem', color: '#666', fontSize: '0.9rem' }}>
-              You {application.status === 'accepted' ? 'accepted' : 'declined'} this offer on{' '}
-              {new Date(application.offer_response_at).toLocaleDateString()}.
-            </p>
-          )}
-
-          {respondError && (
-            <div style={{ color: '#dc3545', marginTop: '0.75rem', padding: '0.5rem', background: '#f8d7da', borderRadius: '4px' }}>
-              {respondError}
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* History Timeline */}
-      <section style={{ marginTop: '2rem', marginBottom: '2rem' }}>
-        <h2>Status History</h2>
+      {/* Status Timeline */}
+      <Card padding="md">
+        <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+          Application Timeline
+        </h2>
         {history.length === 0 ? (
-          <p style={{ color: '#666' }}>No status changes recorded.</p>
+          <p className="text-sm text-text-600">No status changes recorded.</p>
         ) : (
-          <div style={{ maxWidth: '500px' }}>
-            {history.map((item, idx) => (
-              <div key={idx} style={{ display: 'flex', gap: '1rem', padding: '0.5rem 0', borderBottom: idx < history.length - 1 ? '1px solid #eee' : 'none' }}>
-                <div style={{ minWidth: '2rem', textAlign: 'center' }}>
-                  <div style={{
-                    width: '12px', height: '12px', borderRadius: '50%',
-                    background: historyDotColor(item.to_status),
-                    margin: '0.25rem auto',
-                  }} />
-                </div>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 500 }}>
-                    {statusLabel(item.from_status || '')} &rarr; {statusLabel(item.to_status)}
+          <div className="space-y-0">
+            {[...history].reverse().map((item, idx, arr) => (
+              <div
+                key={idx}
+                className="flex gap-3 pb-4 relative"
+              >
+                {/* Vertical line */}
+                {idx < arr.length - 1 && (
+                  <div className="absolute left-[5px] top-3 bottom-0 w-px bg-border" />
+                )}
+                {/* Dot */}
+                <div
+                  className={cn(
+                    'w-3 h-3 rounded-full mt-1 shrink-0 z-10',
+                    historyDotColor(item.to_status),
+                  )}
+                />
+                {/* Content */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-text-900">
+                    {item.from_status
+                      ? `${statusLabel(item.from_status)} → ${statusLabel(item.to_status)}`
+                      : statusLabel(item.to_status)}
                   </p>
-                  <p style={{ margin: '0.15rem 0', fontSize: '0.8rem', color: '#666' }}>
-                    {item.reason || statusLabel(item.to_status)}
-                  </p>
-                  <p style={{ margin: 0, fontSize: '0.75rem', color: '#999' }}>
-                    {new Date(item.created_at).toLocaleString()}
+                  {item.reason && (
+                    <p className="text-xs text-text-600 mt-0.5">
+                      {item.reason}
+                    </p>
+                  )}
+                  <p className="text-xs text-text-400 mt-0.5">
+                    {formatDate(item.created_at)}
                   </p>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </section>
+      </Card>
+
+      {/* Offer confirmation modal */}
+      <Modal
+        open={showOfferModal}
+        onClose={() => !responding && setShowOfferModal(false)}
+        title="Confirm Your Decision"
+      >
+        <p className="text-sm text-text-600 mb-4">
+          Are you sure you want to{' '}
+          <strong>{pendingResponse === 'accepted' ? 'accept' : 'decline'}</strong>{' '}
+          the offer from {application.university_name}?
+        </p>
+        {respondError && (
+          <Alert variant="danger" className="mb-4">
+            {respondError}
+          </Alert>
+        )}
+        <div className="flex justify-end gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => setShowOfferModal(false)}
+            disabled={responding}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={pendingResponse === 'declined' ? 'danger' : 'primary'}
+            loading={responding}
+            onClick={confirmOfferResponse}
+          >
+            {pendingResponse === 'accepted'
+              ? 'Yes, Accept Offer'
+              : 'Yes, Decline Offer'}
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -399,61 +495,156 @@ function statusLabel(status: string): string {
   return status.replace(/_/g, ' ')
 }
 
-function statusBg(status: string): string {
-  switch (status) {
-    case 'draft': return '#e9ecef'
-    case 'submitted': return '#cfe2ff'
-    case 'under_review': return '#fff3cd'
-    case 'admitted': return '#d1e7dd'
-    case 'rejected': return '#f8d7da'
-    case 'waitlisted': return '#ffe0b2'
-    case 'accepted': return '#1b5e20'
-    case 'declined': return '#e9ecef'
-    default: return '#e9ecef'
-  }
-}
-
-function statusColor(status: string): string {
+function statusDescription(status: string): string {
   switch (status) {
     case 'draft':
-    case 'declined': return '#666'
+      return 'This application is still in progress.'
     case 'submitted':
-    case 'under_review': return '#664d03'
-    case 'admitted': return '#0f5132'
-    case 'rejected': return '#842029'
-    case 'waitlisted': return '#e65100'
-    case 'accepted': return '#fff'
-    default: return '#666'
+      return 'Your application has been submitted and is awaiting review.'
+    case 'under_review':
+      return 'Your application is currently being reviewed.'
+    case 'admitted':
+      return 'Congratulations! You have been admitted.'
+    case 'rejected':
+      return 'Your application was not successful.'
+    case 'waitlisted':
+      return 'You have been placed on the waitlist.'
+    case 'accepted':
+      return 'You have accepted the offer.'
+    case 'declined':
+      return 'You have declined the offer.'
+    default:
+      return ''
   }
 }
 
 function historyDotColor(status: string): string {
   switch (status) {
-    case 'draft': return '#999'
-    case 'submitted': return '#0d6efd'
-    case 'under_review': return '#ffc107'
+    case 'draft':
+      return 'bg-neutral/30'
+    case 'submitted':
+      return 'bg-primary'
+    case 'under_review':
+      return 'bg-warning'
     case 'admitted':
-    case 'accepted': return '#198754'
+    case 'accepted':
+      return 'bg-success'
     case 'rejected':
-    case 'declined': return '#dc3545'
-    case 'waitlisted': return '#ff9800'
-    default: return '#999'
+    case 'declined':
+      return 'bg-danger'
+    case 'waitlisted':
+      return 'bg-neutral'
+    default:
+      return 'bg-neutral/30'
   }
 }
 
-function docStatusLabel(item: DocumentChecklistItem, flaggedDoc: ApplicationDocument | null | undefined): string {
-  if (!item.uploaded) return 'Not uploaded'
-  if (item.status === 'verified') return 'Verified'
-  if (item.status === 'flagged') {
-    const reason = flaggedDoc?.flagged_reason
-    return reason ? `Flagged: ${reason}` : 'Flagged — re-upload required'
-  }
-  return 'Pending review'
+function renderFormData(
+  data: Record<string, unknown>,
+  depth = 0,
+): React.ReactNode {
+  return Object.entries(data).map(([key, value]) => {
+    if (value === null || value === undefined) return null
+
+    const label = key
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+
+    if (Array.isArray(value)) {
+      return (
+        <div key={key} className="space-y-3">
+          {depth === 0 && (
+            <h3 className="text-base font-display font-semibold text-text-900">
+              {label}
+            </h3>
+          )}
+          {value.length === 0 && (
+            <p className="text-sm text-text-400">None</p>
+          )}
+          {value.map((item, idx) =>
+            typeof item === 'object' && item !== null ? (
+              <div
+                key={idx}
+                className="bg-background rounded-lg p-4 space-y-2"
+              >
+                <p className="text-xs font-medium text-text-400 uppercase tracking-wider">
+                  {label} {idx + 1}
+                </p>
+                <dl className="space-y-1.5">
+                  {renderFormData(item as Record<string, unknown>, depth + 1)}
+                </dl>
+              </div>
+            ) : (
+              <div key={idx} className="flex gap-2 pl-0">
+                <dt className="text-sm text-text-900">{String(item)}</dt>
+              </div>
+            ),
+          )}
+        </div>
+      )
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      return (
+        <div key={key} className="space-y-3">
+          {depth === 0 && (
+            <h3 className="text-base font-display font-semibold text-text-900">
+              {label}
+            </h3>
+          )}
+          <div
+            className={depth === 0 ? 'bg-background rounded-lg p-4 space-y-2' : 'space-y-1.5'}
+          >
+            <dl className="space-y-1.5">
+              {renderFormData(value as Record<string, unknown>, depth + 1)}
+            </dl>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div key={key} className="flex gap-2">
+        <dt className="text-sm font-medium text-text-600 w-36 shrink-0">
+          {label}
+        </dt>
+        <dd className="text-sm text-text-900">{String(value)}</dd>
+      </div>
+    )
+  })
 }
 
-function docStatusColor(item: DocumentChecklistItem): string {
-  if (!item.uploaded) return '#999'
-  if (item.status === 'verified') return '#198754'
-  if (item.status === 'flagged') return '#dc3545'
-  return '#856404'
+function cn(...classes: (string | boolean | undefined | null)[]): string {
+  return classes.filter(Boolean).join(' ')
+}
+
+function ApplicationDetailSkeleton() {
+  return (
+    <div className="space-y-6">
+      <Skeleton className="h-5 w-48" />
+      <Skeleton className="h-8 w-72" />
+      <Skeleton className="h-20 w-full" />
+      <div className="bg-surface rounded-lg border border-border shadow-sm p-6 space-y-4">
+        <Skeleton className="h-6 w-44" />
+        <div className="grid grid-cols-2 gap-4">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-3/4" />
+        </div>
+      </div>
+      <div className="bg-surface rounded-lg border border-border shadow-sm p-6 space-y-4">
+        <Skeleton className="h-6 w-48" />
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex gap-3">
+            <Skeleton className="h-3 w-3 rounded-full" />
+            <div className="space-y-2 flex-1">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-3 w-64" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

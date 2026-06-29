@@ -95,6 +95,8 @@ export interface Application {
   form_data: Record<string, unknown>
   document_checklist: DocumentChecklistItem[]
   payment: Payment | null
+  document_verified_count?: number
+  document_total_count?: number
   submitted_at: string | null
   decision_at: string | null
   decision_by: string | null
