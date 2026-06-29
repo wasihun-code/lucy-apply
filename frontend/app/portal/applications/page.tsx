@@ -1,11 +1,19 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { getMe } from '@/lib/auth'
+import { getMe, AuthUser } from '@/lib/auth'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { Select } from '@/components/ui/Select'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Table, Column } from '@/components/ui/Table'
+import { Pagination } from '@/components/ui/Pagination'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Button } from '@/components/ui/Button'
+import { Skeleton, SkeletonRow } from '@/components/ui/Skeleton'
+import { FileText } from 'lucide-react'
 
-export interface ApplicationItem {
+interface ApplicationItem {
   id: string
   applicant: string
   applicant_name: string
@@ -17,164 +25,277 @@ export interface ApplicationItem {
   document_total_count: number
 }
 
-export interface ProgramItem {
+interface ProgramItem {
   id: string
   name: string
 }
 
-interface MeResponse {
-  role: string
-  university?: string
-  permission_level?: string
+interface PaginatedResponse<T> {
+  count: number
+  next: string | null
+  previous: string | null
+  results: T[]
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  under_review: 'Under Review',
-  admitted: 'Admitted',
-  rejected: 'Rejected',
-  waitlisted: 'Waitlisted',
-  accepted: 'Accepted',
-  declined: 'Declined',
-}
-
-const STATUS_OPTIONS = ['', 'submitted', 'under_review', 'admitted', 'rejected', 'waitlisted', 'accepted', 'declined']
+const PAGE_SIZE = 20
 
 export default function ApplicationsPage() {
   const router = useRouter()
+  const [user, setUser] = useState<AuthUser | null>(null)
   const [apps, setApps] = useState<ApplicationItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [me, setMe] = useState<MeResponse | null>(null)
   const [programs, setPrograms] = useState<ProgramItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [count, setCount] = useState(0)
+  const [sortKey, setSortKey] = useState('')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [statusFilter, setStatusFilter] = useState('')
   const [programFilter, setProgramFilter] = useState('')
+  const [page, setPage] = useState(1)
 
-  const fetchApps = useCallback(() => {
-    if (!me?.university) return
-    const params = new URLSearchParams()
-    if (statusFilter) params.set('status', statusFilter)
-    if (programFilter) params.set('program', programFilter)
-    setLoading(true)
-    const qs = params.toString()
-    fetch(`/api/proxy/universities/${me.university}/applications/${qs ? `?${qs}` : ''}`)
-      .then((res) => res.ok ? res.json() : Promise.reject())
-      .then((data) => {
-        setApps(data.results || [])
-      }).catch(() => {
-        setApps([])
-      }).finally(() => setLoading(false))
-  }, [me, statusFilter, programFilter])
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    setStatusFilter(params.get('status') || '')
+    setProgramFilter(params.get('program') || '')
+    setPage(Number(params.get('page')) || 1)
+  }, [])
 
   useEffect(() => {
     getMe().then((m) => {
-      if (!m) { router.push('/login'); return }
-      const meData: MeResponse = { role: m.role, university: m.university, permission_level: m.permission_level }
-      setMe(meData)
-      if (m.role !== 'universitystaff') { router.push('/dashboard'); return }
+      if (!m || (m.role !== 'universitystaff' && m.role !== 'platformadmin')) {
+        router.push('/login')
+        return
+      }
+      setUser(m)
       if (!m.university) return
       fetch(`/api/proxy/universities/${m.university}/programs/`)
-        .then((res) => res.ok ? res.json() : Promise.reject())
-        .then((data) => {
+        .then((r) => r.ok ? r.json() : Promise.reject())
+        .then((data: PaginatedResponse<ProgramItem>) => {
           setPrograms(data.results || [])
         }).catch(() => {})
-    }).catch(() => {
-      router.push('/login')
-    })
+    }).catch(() => router.push('/login'))
   }, [router])
 
-  useEffect(() => {
-    if (me?.university) fetchApps()
-  }, [me, fetchApps])
+  const fetchApps = useCallback(() => {
+    if (!user?.university) return
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (statusFilter) params.set('status', statusFilter)
+    if (programFilter) params.set('program', programFilter)
+    if (page > 1) params.set('page', String(page))
+    const qs = params.toString()
+    fetch(`/api/proxy/universities/${user.university}/applications/${qs ? `?${qs}` : ''}`)
+      .then((r) => r.ok ? r.json() : Promise.reject())
+      .then((data: PaginatedResponse<ApplicationItem>) => {
+        setApps(data.results || [])
+        setCount(data.count)
+      }).catch(() => {
+        setApps([])
+        setCount(0)
+      }).finally(() => setLoading(false))
+  }, [user, statusFilter, programFilter, page])
 
-  function statusBadge(status: string) {
-    const colors: Record<string, string> = {
-      draft: '#6c757d',
-      submitted: '#0d6efd',
-      under_review: '#ffc107',
-      admitted: '#198754',
-      rejected: '#dc3545',
-      waitlisted: '#fd7e14',
-      accepted: '#198754',
-      declined: '#6c757d',
+  useEffect(() => {
+    if (user?.university) fetchApps()
+  }, [user, fetchApps])
+
+  useEffect(() => {
+    const params = new URLSearchParams()
+    if (statusFilter) params.set('status', statusFilter)
+    if (programFilter) params.set('program', programFilter)
+    if (page > 1) params.set('page', String(page))
+    const qs = params.toString()
+    const newQs = qs ? `?${qs}` : ''
+    if (window.location.search !== newQs) {
+      router.replace(`/portal/applications${newQs}`, { scroll: false })
     }
-    return (
-      <span style={{
-        fontSize: '0.75rem',
-        padding: '0.2rem 0.5rem',
-        borderRadius: '4px',
-        background: colors[status] || '#e9ecef',
-        color: ['under_review'].includes(status) ? '#000' : '#fff',
-        fontWeight: 600,
-      }}>
-        {STATUS_LABELS[status] || status}
-      </span>
-    )
+  }, [statusFilter, programFilter, page, router])
+
+  function handleStatusChange(value: string) {
+    setStatusFilter(value)
+    setPage(1)
   }
+
+  function handleProgramChange(value: string) {
+    setProgramFilter(value)
+    setPage(1)
+  }
+
+  function handlePageChange(newPage: number) {
+    setPage(newPage)
+  }
+
+  function clearFilters() {
+    setStatusFilter('')
+    setProgramFilter('')
+    setPage(1)
+  }
+
+  function handleSort(key: string) {
+    if (sortKey === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortKey(key)
+      setSortDir('asc')
+    }
+  }
+
+  const sortedApps = useMemo(() => {
+    if (!sortKey) return apps
+    return [...apps].sort((a, b) => {
+      let aVal: string | number = ''
+      let bVal: string | number = ''
+      switch (sortKey) {
+        case 'applicant_name':
+          aVal = a.applicant_name.toLowerCase()
+          bVal = b.applicant_name.toLowerCase()
+          break
+        case 'program_name':
+          aVal = a.program_name.toLowerCase()
+          bVal = b.program_name.toLowerCase()
+          break
+        case 'status':
+          aVal = a.status
+          bVal = b.status
+          break
+        case 'submitted_at':
+          aVal = a.submitted_at || ''
+          bVal = b.submitted_at || ''
+          break
+        default:
+          return 0
+      }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [apps, sortKey, sortDir])
+
+  const totalPages = Math.ceil(count / PAGE_SIZE)
+
+  const columns: Column<ApplicationItem>[] = [
+    {
+      key: 'applicant_name',
+      header: 'Applicant',
+      sortable: true,
+      render: (app) => (
+        <div>
+          <div className="font-medium text-text-900">{app.applicant_name}</div>
+          <div className="text-xs text-text-400">{app.applicant}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'program_name',
+      header: 'Program',
+      sortable: true,
+      render: (app) => <span className="text-text-600">{app.program_name}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      sortable: true,
+      className: 'w-32',
+      render: (app) => <StatusBadge status={app.status} />,
+    },
+    {
+      key: 'submitted_at',
+      header: 'Submitted',
+      sortable: true,
+      className: 'w-28',
+      render: (app) => (
+        <span className="text-text-600 text-sm">
+          {app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'documents',
+      header: 'Documents',
+      className: 'w-28',
+      render: (app) => (
+        <span className="text-text-600 text-sm">
+          {app.document_verified_count}/{app.document_total_count} verified
+        </span>
+      ),
+    },
+  ]
+
+  const hasFilters = statusFilter || programFilter
 
   return (
     <div>
-      <h2 style={{ marginBottom: '1rem' }}>Applications</h2>
+      <PageHeader
+        title="Applications"
+        description="Review and manage applications submitted to your programs"
+      />
 
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', alignItems: 'center' }}>
-        <select
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <Select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' }}
+          onChange={(e) => handleStatusChange(e.target.value)}
+          className="w-40"
         >
           <option value="">All statuses</option>
-          {STATUS_OPTIONS.filter(Boolean).map((s) => (
-            <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>
-          ))}
-        </select>
-        <select
+          <option value="submitted">Submitted</option>
+          <option value="under_review">Under Review</option>
+          <option value="admitted">Admitted</option>
+          <option value="rejected">Rejected</option>
+          <option value="waitlisted">Waitlisted</option>
+          <option value="accepted">Accepted</option>
+          <option value="declined">Declined</option>
+        </Select>
+
+        <Select
           value={programFilter}
-          onChange={(e) => setProgramFilter(e.target.value)}
-          style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' }}
+          onChange={(e) => handleProgramChange(e.target.value)}
+          className="w-56"
         >
           <option value="">All programs</option>
           {programs.map((p) => (
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
-        </select>
+        </Select>
+
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            Clear Filters
+          </Button>
+        )}
       </div>
 
-      {loading ? <p>Loading applications...</p> : apps.length === 0 ? (
-        <p style={{ color: '#666' }}>No applications found.</p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '900px' }}>
-          {apps.map((app) => (
-            <Link
-              key={app.id}
-              href={`/portal/applications/${app.id}`}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.75rem 1rem',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                textDecoration: 'none',
-                color: 'inherit',
-              }}
-            >
-              <div style={{ flex: 2 }}>
-                <strong>{app.applicant_name}</strong>
-                <br />
-                <span style={{ fontSize: '0.8rem', color: '#666' }}>{app.program_name}</span>
-              </div>
-              <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem', color: '#666' }}>
-                {app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : '—'}
-              </div>
-              <div style={{ flex: 1, textAlign: 'center', fontSize: '0.85rem' }}>
-                {app.document_verified_count}/{app.document_total_count} verified
-              </div>
-              <div style={{ flex: 1, textAlign: 'right' }}>
-                {statusBadge(app.status)}
-              </div>
-            </Link>
-          ))}
+      {loading ? (
+        <div className="overflow-x-auto">
+          <div className="w-full">
+            <Skeleton className="h-10 w-full mb-1" />
+            {Array.from({ length: 5 }).map((_, i) => (
+              <SkeletonRow key={i} />
+            ))}
+          </div>
         </div>
+      ) : sortedApps.length === 0 ? (
+        <EmptyState
+          icon={<FileText size={32} className="text-text-400" />}
+          heading="No applications found"
+          description={hasFilters ? 'Try adjusting your filters to see more results.' : 'Applications submitted to your programs will appear here.'}
+        />
+      ) : (
+        <>
+          <Table<ApplicationItem>
+            columns={columns}
+            data={sortedApps}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={handleSort}
+            onRowClick={(app) => router.push(`/portal/applications/${app.id}`)}
+          />
+          {totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+            />
+          )}
+        </>
       )}
     </div>
   )
