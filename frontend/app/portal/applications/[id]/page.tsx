@@ -1,10 +1,74 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getMe } from '@/lib/auth'
+import { formatDate } from '@/lib/utils'
+import { cn } from '@/lib/utils'
+import { Card } from '@/components/ui/Card'
+import { Button } from '@/components/ui/Button'
+import { Alert } from '@/components/ui/Alert'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Modal } from '@/components/ui/Modal'
+import { Textarea } from '@/components/ui/Textarea'
+import { PageHeader } from '@/components/shared/PageHeader'
+import {
+  statusLabel,
+  historyDotColor,
+  getDocDisplayStatus,
+  ApplicationDetailSkeleton,
+} from '@/lib/application-helpers'
+import { File } from 'lucide-react'
 
-async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+interface ApplicationDetail {
+  id: string
+  applicant: string
+  applicant_name?: string
+  program: string
+  program_name: string
+  university: string
+  university_name: string
+  admission_cycle: string
+  status: string
+  form_data: Record<string, unknown>
+  document_checklist: {
+    type: string
+    label: string
+    status: string | null
+    uploaded: boolean
+  }[]
+  submitted_at: string | null
+  decision_at: string | null
+  decision_by: string | null
+  offer_response_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface DocumentItem {
+  id: string
+  document_type: string
+  status: string
+  flagged_reason: string | null
+  version: number
+  reviewed_by: string | null
+  reviewed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+interface HistoryItem {
+  from_status: string | null
+  to_status: string
+  changed_by_type: string
+  reason: string
+  created_at: string
+}
+
+async function authFetch<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const url = `/api/proxy/${path.replace(/^\//, '')}`
   const res = await fetch(url, {
     ...options,
@@ -21,71 +85,6 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
   return res.json()
 }
 
-interface ApplicationDetail {
-  id: string
-  applicant: string
-  applicant_name?: string
-  program: string
-  program_name: string
-  university: string
-  university_name: string
-  admission_cycle: string
-  status: string
-  form_data: Record<string, unknown>
-  document_checklist: { type: string; label: string; status: string | null; uploaded: boolean }[]
-  submitted_at: string | null
-  decision_at: string | null
-  decision_by: string | null
-  offer_response_at: string | null
-  created_at: string
-  updated_at: string
-}
-
-interface DocumentItem {
-  id: string
-  document_type: string
-  status: string
-  flagged_reason: string | null
-  version: number
-  created_at: string
-}
-
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  submitted: 'Submitted',
-  under_review: 'Under Review',
-  admitted: 'Admitted',
-  rejected: 'Rejected',
-  waitlisted: 'Waitlisted',
-  accepted: 'Accepted',
-  declined: 'Declined',
-}
-
-function statusBadge(status: string) {
-  const colors: Record<string, string> = {
-    draft: '#6c757d',
-    submitted: '#0d6efd',
-    under_review: '#ffc107',
-    admitted: '#198754',
-    rejected: '#dc3545',
-    waitlisted: '#fd7e14',
-    accepted: '#198754',
-    declined: '#6c757d',
-  }
-  return (
-    <span style={{
-      fontSize: '0.8rem',
-      padding: '0.25rem 0.6rem',
-      borderRadius: '4px',
-      background: colors[status] || '#e9ecef',
-      color: ['under_review'].includes(status) ? '#000' : '#fff',
-      fontWeight: 600,
-    }}>
-      {STATUS_LABELS[status] || status}
-    </span>
-  )
-}
-
 export default function ApplicationDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -93,15 +92,25 @@ export default function ApplicationDetailPage() {
 
   const [app, setApp] = useState<ApplicationDetail | null>(null)
   const [docs, setDocs] = useState<DocumentItem[]>([])
+  const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [flagModal, setFlagModal] = useState<{ docId: string; docType: string } | null>(null)
+
+  const [verifyingDocId, setVerifyingDocId] = useState<string | null>(null)
+
+  const [flagFormDocId, setFlagFormDocId] = useState<string | null>(null)
   const [flagReason, setFlagReason] = useState('')
   const [flagging, setFlagging] = useState(false)
-  const [actionMsg, setActionMsg] = useState('')
-  const [reverseReason, setReverseReason] = useState('')
-  const [showReverseInput, setShowReverseInput] = useState(false)
+  const [flagError, setFlagError] = useState('')
+
+  const [decisionTarget, setDecisionTarget] = useState<string | null>(null)
   const [deciding, setDeciding] = useState(false)
+  const [decisionError, setDecisionError] = useState('')
+
+  const [reverseModalOpen, setReverseModalOpen] = useState(false)
+  const [reverseReason, setReverseReason] = useState('')
+  const [reversing, setReversing] = useState(false)
+  const [reverseError, setReverseError] = useState('')
 
   const fetchData = useCallback(() => {
     if (!id) return
@@ -110,56 +119,103 @@ export default function ApplicationDetailPage() {
     Promise.all([
       authFetch<ApplicationDetail>(`applications/${id}/`),
       authFetch<DocumentItem[]>(`applications/${id}/documents/`),
-    ]).then(([appData, docsData]) => {
-      setApp(appData)
-      setDocs(docsData)
-    }).catch((e) => {
-      setError(e instanceof Error ? e.message : 'Failed to load')
-    }).finally(() => setLoading(false))
+      authFetch<HistoryItem[]>(`applications/${id}/history/`),
+    ])
+      .then(([appData, docsData, historyData]) => {
+        setApp(appData)
+        setDocs(docsData)
+        setHistory(historyData)
+      })
+      .catch((e) => {
+        setError(e instanceof Error ? e.message : 'Failed to load application')
+      })
+      .finally(() => setLoading(false))
   }, [id])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  useEffect(() => {
+    getMe()
+      .then((m) => {
+        if (
+          !m ||
+          (m.role !== 'universitystaff' && m.role !== 'platformadmin')
+        ) {
+          router.push('/login')
+        }
+      })
+      .catch(() => router.push('/login'))
+  }, [router])
+
+  const latestDocsByType = useMemo(() => {
+    const map: Record<string, DocumentItem> = {}
+    for (const doc of docs) {
+      const existing = map[doc.document_type]
+      if (!existing || doc.version > existing.version) {
+        map[doc.document_type] = doc
+      }
+    }
+    return map
+  }, [docs])
 
   async function handleVerify(docId: string) {
+    setVerifyingDocId(docId)
     try {
       await authFetch(`documents/${docId}/verify/`, { method: 'PATCH' })
-      setActionMsg('Document verified')
-      fetchData()
+      await fetchData()
     } catch (e) {
-      setActionMsg(e instanceof Error ? e.message : 'Verify failed')
+      setError(e instanceof Error ? e.message : 'Verify failed')
+    } finally {
+      setVerifyingDocId(null)
     }
   }
 
   async function handleFlag() {
-    if (!flagModal || !flagReason.trim()) return
+    if (!flagFormDocId || !flagReason.trim()) return
     setFlagging(true)
+    setFlagError('')
     try {
-      await authFetch(`documents/${flagModal.docId}/flag/`, {
+      await authFetch(`documents/${flagFormDocId}/flag/`, {
         method: 'PATCH',
         body: JSON.stringify({ reason: flagReason.trim() }),
       })
-      setActionMsg('Document flagged')
-      setFlagModal(null)
+      setFlagFormDocId(null)
       setFlagReason('')
-      fetchData()
+      await fetchData()
     } catch (e) {
-      setActionMsg(e instanceof Error ? e.message : 'Flag failed')
+      setFlagError(e instanceof Error ? e.message : 'Flag failed')
     } finally {
       setFlagging(false)
     }
   }
 
-  async function handleDecision(status: string) {
-    setDeciding(true)
+  async function handleOpenForReview() {
     try {
       await authFetch(`applications/${id}/status/`, {
         method: 'PATCH',
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({ status: 'under_review' }),
       })
-      setActionMsg(`Decision issued: ${status}`)
-      fetchData()
+      await fetchData()
     } catch (e) {
-      setActionMsg(e instanceof Error ? e.message : 'Decision failed')
+      setError(e instanceof Error ? e.message : 'Failed to open for review')
+    }
+  }
+
+  async function handleDecision() {
+    if (!decisionTarget) return
+    setDeciding(true)
+    setDecisionError('')
+    try {
+      await authFetch(`applications/${id}/status/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status: decisionTarget }),
+      })
+      setDecisionTarget(null)
+      await fetchData()
+    } catch (e) {
+      setDecisionError(e instanceof Error ? e.message : 'Decision failed')
     } finally {
       setDeciding(false)
     }
@@ -167,351 +223,516 @@ export default function ApplicationDetailPage() {
 
   async function handleReverse() {
     if (!reverseReason.trim()) return
-    setDeciding(true)
+    setReversing(true)
+    setReverseError('')
     try {
       await authFetch(`applications/${id}/status/`, {
         method: 'PATCH',
-        body: JSON.stringify({ status: 'under_review', reason: reverseReason.trim() }),
+        body: JSON.stringify({
+          status: 'under_review',
+          reason: reverseReason.trim(),
+        }),
       })
-      setActionMsg('Decision reversed')
-      setShowReverseInput(false)
+      setReverseModalOpen(false)
       setReverseReason('')
-      fetchData()
+      await fetchData()
     } catch (e) {
-      setActionMsg(e instanceof Error ? e.message : 'Reverse failed')
+      setReverseError(e instanceof Error ? e.message : 'Reverse failed')
     } finally {
-      setDeciding(false)
+      setReversing(false)
     }
   }
 
-  if (loading) return <p>Loading application...</p>
-  if (error) return <p style={{ color: '#dc3545' }}>{error}</p>
-  if (!app) return <p>Application not found.</p>
+  if (loading) return <ApplicationDetailSkeleton />
+  if (error) {
+    return (
+      <div>
+        <Alert variant="danger">{error}</Alert>
+        <Button variant="secondary" className="mt-4" onClick={fetchData}>
+          Retry
+        </Button>
+      </div>
+    )
+  }
+  if (!app) {
+    return (
+      <div>
+        <Alert variant="danger">Application not found.</Alert>
+        <Button
+          variant="secondary"
+          className="mt-4"
+          onClick={() => router.push('/portal/applications')}
+        >
+          Back to Applications
+        </Button>
+      </div>
+    )
+  }
+
+  const personal = (app.form_data?.personal as Record<string, string>) || {}
+  const contact = (app.form_data?.contact as Record<string, string>) || {}
+  const motivation =
+    (app.form_data?.motivation as Record<string, string>) || {}
+
+  const fullName =
+    [personal.given_name, personal.middle_name, personal.family_name]
+      .filter(Boolean)
+      .join(' ') || app.applicant_name || '—'
+
+  const phone =
+    [contact.mobile_country_code, contact.mobile_number]
+      .filter(Boolean)
+      .join(' ') || '—'
+  const nationality = personal.nationality || personal.citizenship || '—'
+  const dateOfBirth = personal.date_of_birth || '—'
+  const personalStatement = motivation.personal_statement || '—'
 
   const allDocsVerified = app.document_checklist.every(
-    (d) => d.status === 'verified' || !d.uploaded
+    (d) => d.status === 'verified' || !d.uploaded,
   )
-  const isDecisionState = ['admitted', 'rejected', 'waitlisted'].includes(app.status)
-  const canReverse = isDecisionState && !app.offer_response_at
+  const unverifiedCount = app.document_checklist.filter(
+    (d) => d.uploaded && d.status !== 'verified',
+  ).length
 
-  const latestDocsByType: Record<string, DocumentItem> = {}
-  for (const doc of docs) {
-    if (!latestDocsByType[doc.document_type] || doc.version > latestDocsByType[doc.document_type].version) {
-      latestDocsByType[doc.document_type] = doc
-    }
+  const isDecisionState = ['admitted', 'rejected', 'waitlisted'].includes(
+    app.status,
+  )
+  const canReverse = isDecisionState && !app.offer_response_at
+  const isApplicantResponded = ['accepted', 'declined'].includes(app.status)
+
+  function renderDecisionVariant(
+    decision: string,
+  ): 'primary' | 'secondary' | 'danger' {
+    if (decision === 'admitted') return 'primary'
+    if (decision === 'rejected') return 'danger'
+    return 'secondary'
   }
 
   return (
-    <div style={{ maxWidth: '800px' }}>
-      {actionMsg && (
-        <div style={{
-          padding: '0.5rem 1rem',
-          background: actionMsg.includes('fail') || actionMsg.includes('error') ? '#f8d7da' : '#d1e7dd',
-          borderRadius: '4px',
-          marginBottom: '1rem',
-          fontSize: '0.9rem',
-        }}>
-          {actionMsg}
-          <button
-            onClick={() => setActionMsg('')}
-            style={{ marginLeft: '1rem', cursor: 'pointer', background: 'none', border: 'none' }}
-          >
-            x
-          </button>
-        </div>
-      )}
+    <div>
+      <PageHeader
+        title={fullName}
+        breadcrumb={[
+          { label: 'Applications', href: '/portal/applications' },
+          { label: fullName, href: '#' },
+        ]}
+      />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-        <h2 style={{ margin: 0 }}>Application Review</h2>
-        {statusBadge(app.status)}
-      </div>
-
-      <div style={{ marginBottom: '1.5rem' }}>
-        <p><strong>Applicant:</strong> {app.applicant_name || app.applicant}</p>
-        <p><strong>Program:</strong> {app.program_name}</p>
-        <p><strong>University:</strong> {app.university_name}</p>
-        <p><strong>Submitted:</strong> {app.submitted_at ? new Date(app.submitted_at).toLocaleString() : '—'}</p>
-        {app.decision_at && <p><strong>Decision date:</strong> {new Date(app.decision_at).toLocaleString()}</p>}
-        {app.offer_response_at && <p><strong>Applicant responded:</strong> {new Date(app.offer_response_at).toLocaleString()}</p>}
-      </div>
-
-      {Object.keys(app.form_data).length > 0 && (
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Application Data</h3>
-          <div style={{ background: '#f8f9fa', padding: '1rem', borderRadius: '6px', fontSize: '0.9rem' }}>
-            {Object.entries(app.form_data).map(([key, value]) => (
-              <div key={key} style={{ marginBottom: '0.25rem' }}>
-                <strong>{key}:</strong> {String(value)}
+      <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6">
+        {/* ── Left column ── */}
+        <div className="space-y-6">
+          {/* Applicant Information */}
+          <Card>
+            <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+              Applicant Information
+            </h2>
+            <dl className="space-y-4">
+              <div>
+                <dt className="text-sm font-medium text-text-600">
+                  Full Name
+                </dt>
+                <dd className="text-sm text-text-900 mt-1">{fullName}</dd>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+              <div>
+                <dt className="text-sm font-medium text-text-600">Email</dt>
+                <dd className="text-sm text-text-400 mt-1">
+                  {app.applicant}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-text-600">
+                  Phone Number
+                </dt>
+                <dd className="text-sm text-text-900 mt-1">{phone}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-text-600">
+                  Nationality
+                </dt>
+                <dd className="text-sm text-text-900 mt-1">{nationality}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-text-600">
+                  Date of Birth
+                </dt>
+                <dd className="text-sm text-text-900 mt-1">{dateOfBirth}</dd>
+              </div>
+              <div>
+                <dt className="text-sm font-medium text-text-600">
+                  Personal Statement
+                </dt>
+                <dd className="text-sm text-text-900 mt-1 whitespace-pre-wrap">
+                  {personalStatement}
+                </dd>
+              </div>
+            </dl>
+          </Card>
 
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Documents</h3>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          {app.document_checklist.length === 0 ? (
-            <p style={{ color: '#666', fontSize: '0.9rem' }}>No required documents for this program.</p>
-          ) : app.document_checklist.map((item) => {
-            const doc = latestDocsByType[item.type]
-            return (
-              <div
-                key={item.type}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0.6rem 1rem',
-                  border: '1px solid #ddd',
-                  borderRadius: '6px',
-                }}
-              >
-                <div>
-                  <strong>{item.label}</strong>
-                  {doc && doc.flagged_reason && (
-                    <div style={{ fontSize: '0.8rem', color: '#dc3545', marginTop: '0.2rem' }}>
-                      Reason: {doc.flagged_reason}
+          {/* Required Documents */}
+          <Card>
+            <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+              Required Documents
+            </h2>
+            {app.document_checklist.length === 0 ? (
+              <p className="text-sm text-text-600">
+                No required documents for this program.
+              </p>
+            ) : (
+              <div className="divide-y divide-border">
+                {app.document_checklist.map((item) => {
+                  const doc = latestDocsByType[item.type]
+                  const { badgeStatus, label: badgeLabel } =
+                    getDocDisplayStatus(item)
+                  const canAct = item.uploaded && !item.status
+
+                  return (
+                    <div key={item.type}>
+                      <div className="flex items-center justify-between py-3 gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <File
+                            size={20}
+                            className="text-text-400 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-text-900 truncate">
+                              {item.label}
+                            </p>
+                            {doc && (
+                              <p className="text-xs text-text-400 mt-0.5">
+                                Last updated:{' '}
+                                {formatDate(doc.created_at)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <StatusBadge
+                            status={badgeStatus}
+                            label={badgeLabel}
+                          />
+                          {canAct && doc && (
+                            <>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                loading={verifyingDocId === doc.id}
+                                onClick={() => handleVerify(doc.id)}
+                              >
+                                Verify
+                              </Button>
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                onClick={() => {
+                                  setFlagFormDocId(doc.id)
+                                  setFlagReason('')
+                                  setFlagError('')
+                                }}
+                              >
+                                Flag
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Verified info */}
+                      {item.status === 'verified' && doc && (
+                        <div className="pb-3 -mt-1">
+                          <p className="text-xs text-text-400">
+                            Verified
+                            {doc.reviewed_at
+                              ? ` on ${formatDate(doc.reviewed_at)}`
+                              : ''}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Flagged reason */}
+                      {item.status === 'flagged' && doc?.flagged_reason && (
+                        <div className="pb-3 -mt-1">
+                          <p className="text-sm text-danger italic">
+                            {doc.flagged_reason}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Inline flag form */}
+                      {flagFormDocId === doc?.id && (
+                        <div className="pb-3 space-y-2">
+                          <Textarea
+                            value={flagReason}
+                            onChange={(e) => setFlagReason(e.target.value)}
+                            placeholder="Describe the issue with this document..."
+                            rows={3}
+                          />
+                          {flagError && (
+                            <Alert variant="danger">{flagError}</Alert>
+                          )}
+                          <div className="flex gap-2">
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={handleFlag}
+                              disabled={!flagReason.trim()}
+                              loading={flagging}
+                            >
+                              Confirm Flag
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setFlagFormDocId(null)
+                                setFlagReason('')
+                                setFlagError('')
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  {item.uploaded ? (
-                    <span style={{
-                      fontSize: '0.75rem',
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '4px',
-                      background: item.status === 'verified' ? '#d1e7dd' : item.status === 'flagged' ? '#f8d7da' : '#fff3cd',
-                      color: item.status === 'verified' ? '#0f5132' : item.status === 'flagged' ? '#842029' : '#664d03',
-                    }}>
-                      {item.status}
-                    </span>
-                  ) : (
-                    <span style={{ fontSize: '0.8rem', color: '#999' }}>Not uploaded</span>
-                  )}
-                  {item.uploaded && doc && item.status !== 'verified' && (
-                    <button
-                      onClick={() => handleVerify(doc.id)}
-                      style={{
-                        padding: '0.3rem 0.6rem',
-                        background: '#198754',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem',
-                      }}
-                    >
-                      Verify
-                    </button>
-                  )}
-                  {item.uploaded && doc && item.status !== 'flagged' && item.status !== 'verified' && (
-                    <button
-                      onClick={() => setFlagModal({ docId: doc.id, docType: item.label })}
-                      style={{
-                        padding: '0.3rem 0.6rem',
-                        background: '#dc3545',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem',
-                      }}
-                    >
-                      Flag
-                    </button>
-                  )}
-                </div>
+                  )
+                })}
               </div>
-            )
-          })}
+            )}
+          </Card>
+
+          {/* Status Timeline */}
+          <Card>
+            <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+              Application Timeline
+            </h2>
+            {history.length === 0 ? (
+              <p className="text-sm text-text-600">
+                No status changes recorded.
+              </p>
+            ) : (
+              <div className="space-y-0">
+                {[...history].reverse().map((item, idx, arr) => (
+                  <div key={idx} className="flex gap-3 pb-4 relative">
+                    {idx < arr.length - 1 && (
+                      <div className="absolute left-[5px] top-3 bottom-0 w-px bg-border" />
+                    )}
+                    <div
+                      className={cn(
+                        'w-3 h-3 rounded-full mt-1 shrink-0 z-10',
+                        historyDotColor(item.to_status),
+                      )}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-900">
+                        {item.from_status
+                          ? `${statusLabel(item.from_status)} → ${statusLabel(item.to_status)}`
+                          : statusLabel(item.to_status)}
+                      </p>
+                      {item.reason && (
+                        <p className="text-xs text-text-600 mt-0.5">
+                          {item.reason}
+                        </p>
+                      )}
+                      <p className="text-xs text-text-400 mt-0.5">
+                        {formatDate(item.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
-      </div>
 
-      <div style={{ marginBottom: '2rem' }}>
-        <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Decision</h3>
+        {/* ── Right column — Decision Panel ── */}
+        <div className="lg:sticky lg:top-6 self-start space-y-6">
+          <Card>
+            <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+              Decision
+            </h2>
 
-        {isDecisionState ? (
-          <div>
-            <p style={{ color: '#666', fontSize: '0.9rem' }}>
-              Current decision: <strong>{STATUS_LABELS[app.status]}</strong>
-              {app.offer_response_at ? ' — Applicant has responded.' : ''}
-            </p>
+            {/* Applicant responded */}
+            {isApplicantResponded && (
+              <Alert variant="info">
+                Applicant has {statusLabel(app.status)} the offer
+                {app.offer_response_at
+                  ? ` on ${formatDate(app.offer_response_at)}`
+                  : ''}
+                . No further action required.
+              </Alert>
+            )}
+
+            {/* Decision issued, no response */}
             {canReverse && (
               <div>
-                {!showReverseInput ? (
-                  <button
-                    onClick={() => setShowReverseInput(true)}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      background: '#fd7e14',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                    }}
-                  >
-                    Reverse Decision
-                  </button>
-                ) : (
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <textarea
-                      value={reverseReason}
-                      onChange={(e) => setReverseReason(e.target.value)}
-                      placeholder="Reason for reversal..."
-                      rows={2}
-                      style={{ flex: 1, padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.85rem' }}
-                    />
-                    <button
-                      onClick={handleReverse}
-                      disabled={deciding || !reverseReason.trim()}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        background: '#fd7e14',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: deciding || !reverseReason.trim() ? 'not-allowed' : 'pointer',
-                        opacity: deciding || !reverseReason.trim() ? 0.6 : 1,
-                        fontSize: '0.9rem',
-                      }}
-                    >
-                      {deciding ? 'Reversing...' : 'Confirm Reverse'}
-                    </button>
-                    <button
-                      onClick={() => { setShowReverseInput(false); setReverseReason('') }}
-                      style={{
-                        padding: '0.5rem 1rem',
-                        background: '#6c757d',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                      }}
-                    >
-                      Cancel
-                    </button>
+                <Alert
+                  variant={
+                    app.status === 'admitted' ? 'success' : 'danger'
+                  }
+                >
+                  Decision issued: {statusLabel(app.status)}
+                  {app.decision_at
+                    ? ` on ${formatDate(app.decision_at)}`
+                    : ''}
+                </Alert>
+                <Button
+                  variant="ghost"
+                  className="w-full mt-3"
+                  onClick={() => {
+                    setReverseModalOpen(true)
+                    setReverseReason('')
+                    setReverseError('')
+                  }}
+                >
+                  Reverse Decision
+                </Button>
+              </div>
+            )}
+
+            {/* Under review — doc check + decision buttons */}
+            {app.status === 'under_review' && (
+              <div>
+                {unverifiedCount > 0 && (
+                  <Alert variant="warning" className="mb-3">
+                    {unverifiedCount} document(s) need verification before a
+                    decision can be issued.
+                  </Alert>
+                )}
+                {allDocsVerified && (
+                  <div className="space-y-2">
+                    {['admitted', 'waitlisted', 'rejected'].map(
+                      (decision) => (
+                        <Button
+                          key={decision}
+                          variant={renderDecisionVariant(decision)}
+                          className="w-full"
+                          onClick={() => {
+                            setDecisionTarget(decision)
+                            setDecisionError('')
+                          }}
+                        >
+                          {decision.charAt(0).toUpperCase() +
+                            decision.slice(1)}
+                        </Button>
+                      ),
+                    )}
                   </div>
                 )}
               </div>
             )}
-          </div>
-        ) : (
-          <div>
-            {app.status === 'submitted' && (
-              <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                Move to under review to enable decision buttons.
-              </p>
-            )}
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              {['admitted', 'rejected', 'waitlisted'].map((decision) => {
-                const colors: Record<string, string> = {
-                  admitted: '#198754',
-                  rejected: '#dc3545',
-                  waitlisted: '#fd7e14',
-                }
-                return (
-                  <button
-                    key={decision}
-                    onClick={() => handleDecision(decision)}
-                    disabled={deciding || (app.status === 'under_review' && !allDocsVerified)}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      background: colors[decision],
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '6px',
-                      cursor: deciding || (app.status === 'under_review' && !allDocsVerified) ? 'not-allowed' : 'pointer',
-                      opacity: deciding || (app.status === 'under_review' && !allDocsVerified) ? 0.5 : 1,
-                      fontSize: '0.9rem',
-                    }}
-                    title={
-                      app.status === 'under_review' && !allDocsVerified
-                        ? 'All documents must be verified before issuing a decision'
-                        : ''
-                    }
+
+            {/* Draft / submitted — open for review */}
+            {!isDecisionState &&
+              !isApplicantResponded &&
+              app.status !== 'under_review' && (
+                <div>
+                  <Alert variant="info" className="mb-3">
+                    This application has not been opened for review yet.
+                  </Alert>
+                  <Button
+                    variant="primary"
+                    className="w-full"
+                    onClick={handleOpenForReview}
                   >
-                    {deciding ? 'Processing...' : decision.charAt(0).toUpperCase() + decision.slice(1)}
-                  </button>
-                )
-              })}
-            </div>
-            {app.status === 'under_review' && !allDocsVerified && (
-              <p style={{ color: '#dc3545', fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                All documents must be verified before issuing a decision.
-              </p>
+                    Open for Review
+                  </Button>
+                </div>
+              )}
+
+            {/* Current status */}
+            {!isApplicantResponded && (
+              <div className="flex items-center justify-center mt-4">
+                <StatusBadge status={app.status} />
+              </div>
             )}
-          </div>
-        )}
+          </Card>
+        </div>
       </div>
 
-      <button
-        onClick={() => router.push('/portal/applications')}
-        style={{
-          padding: '0.4rem 0.8rem',
-          background: '#6c757d',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          fontSize: '0.85rem',
-        }}
+      {/* ── Decision confirmation modal ── */}
+      <Modal
+        open={decisionTarget !== null}
+        onClose={() => !deciding && setDecisionTarget(null)}
+        title="Confirm Decision"
       >
-        Back to Applications
-      </button>
-
-      {flagModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-        }}>
-          <div style={{ background: '#fff', padding: '1.5rem', borderRadius: '8px', width: '400px', maxWidth: '90%' }}>
-            <h3 style={{ marginTop: 0 }}>Flag Document</h3>
-            <p style={{ fontSize: '0.9rem', color: '#666' }}>
-              Provide a reason for flagging <strong>{flagModal.docType}</strong>:
-            </p>
-            <textarea
-              value={flagReason}
-              onChange={(e) => setFlagReason(e.target.value)}
-              rows={3}
-              placeholder="Required reason..."
-              style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc', fontSize: '0.9rem', boxSizing: 'border-box' }}
-            />
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => { setFlagModal(null); setFlagReason('') }}
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  background: '#6c757d',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleFlag}
-                disabled={flagging || !flagReason.trim()}
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  background: '#dc3545',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: flagging || !flagReason.trim() ? 'not-allowed' : 'pointer',
-                  opacity: flagging || !flagReason.trim() ? 0.6 : 1,
-                }}
-              >
-                {flagging ? 'Flagging...' : 'Flag'}
-              </button>
-            </div>
-          </div>
+        <p className="text-sm text-text-600">
+          Are you sure you want to mark this application as{' '}
+          <strong>
+            {decisionTarget
+              ? statusLabel(decisionTarget)
+              : ''}
+          </strong>
+          ?
+        </p>
+        <p className="text-xs text-text-400 mt-2">
+          This action can be reversed if the applicant has not yet responded.
+        </p>
+        {decisionError && (
+          <Alert variant="danger" className="mt-3">
+            {decisionError}
+          </Alert>
+        )}
+        <div className="flex justify-end gap-3 mt-6">
+          <Button
+            variant="secondary"
+            onClick={() => setDecisionTarget(null)}
+            disabled={deciding}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant={
+              decisionTarget
+                ? renderDecisionVariant(decisionTarget)
+                : 'primary'
+            }
+            loading={deciding}
+            onClick={handleDecision}
+          >
+            Confirm
+          </Button>
         </div>
-      )}
+      </Modal>
+
+      {/* ── Reverse decision modal ── */}
+      <Modal
+        open={reverseModalOpen}
+        onClose={() => !reversing && setReverseModalOpen(false)}
+        title="Reverse Decision"
+      >
+        <p className="text-sm text-text-600">
+          Provide a reason for reversing this decision:
+        </p>
+        <Textarea
+          value={reverseReason}
+          onChange={(e) => setReverseReason(e.target.value)}
+          placeholder="Reason for reversal..."
+          rows={3}
+          className="mt-3"
+        />
+        {reverseError && (
+          <Alert variant="danger" className="mt-3">
+            {reverseError}
+          </Alert>
+        )}
+        <div className="flex justify-end gap-3 mt-6">
+          <Button
+            variant="secondary"
+            onClick={() => setReverseModalOpen(false)}
+            disabled={reversing}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            loading={reversing}
+            disabled={!reverseReason.trim()}
+            onClick={handleReverse}
+          >
+            Confirm Reversal
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
