@@ -1,9 +1,39 @@
 'use client'
 
-import { useEffect, useState, FormEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { getMe } from '@/lib/auth'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { Textarea } from '@/components/ui/Textarea'
+import { FormField } from '@/components/ui/FormField'
+import { Card } from '@/components/ui/Card'
+import { Alert } from '@/components/ui/Alert'
+import { Plus, X } from 'lucide-react'
+
+async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = `/api/proxy/${path.replace(/^\//, '')}`
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return res.json()
+}
+
+interface DocRow {
+  type: string
+  label: string
+}
 
 export default function NewProgramPage() {
   const router = useRouter()
@@ -14,8 +44,9 @@ export default function NewProgramPage() {
   const [name, setName] = useState('')
   const [degreeLevel, setDegreeLevel] = useState('undergraduate')
   const [description, setDescription] = useState('')
+  const [requirements, setRequirements] = useState('')
   const [feeAmount, setFeeAmount] = useState('')
-  const [feeCurrency, setFeeCurrency] = useState('USD')
+  const [docs, setDocs] = useState<DocRow[]>([{ type: '', label: '' }])
 
   useEffect(() => {
     getMe().then((m) => {
@@ -23,34 +54,52 @@ export default function NewProgramPage() {
         router.push('/portal/programs')
         return
       }
-      setUniversityId(m.university!)
+      setUniversityId(m.university)
     })
   }, [router])
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
+  function handleDocChange(index: number, field: 'type' | 'label', value: string) {
+    setDocs((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: value }
+      return next
+    })
+  }
+
+  function addDocRow() {
+    setDocs((prev) => [...prev, { type: '', label: '' }])
+  }
+
+  function removeDocRow(index: number) {
+    setDocs((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  async function handleSubmit(status: 'draft' | 'published') {
     if (!universityId || saving) return
+
+    const validDocs = docs.filter((d) => d.type.trim() && d.label.trim())
+    if (validDocs.length === 0) {
+      setError('At least one required document must be specified.')
+      return
+    }
+
     setSaving(true)
     setError(null)
 
     try {
-      const res = await fetch(`/api/proxy/universities/${universityId}/programs/`, {
+      await authFetch(`universities/${universityId}/programs/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           degree_level: degreeLevel,
           description,
+          requirements,
           fee_amount: feeAmount,
-          fee_currency: feeCurrency,
-          required_documents: [],
+          fee_currency: 'USD',
+          required_documents: validDocs,
+          status,
         }),
       })
-      if (!res.ok) {
-        const text = await res.text()
-        const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
-        throw new Error(msg)
-      }
       router.push('/portal/programs')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create program')
@@ -61,90 +110,158 @@ export default function NewProgramPage() {
 
   return (
     <div>
-      <Link href="/portal/programs" style={{ fontSize: '0.875rem', display: 'inline-block', marginBottom: '1rem' }}>
-        &larr; Back to Programs
-      </Link>
-      <h2>Create Program</h2>
+      <PageHeader
+        title="New Program"
+        breadcrumb={[
+          { label: 'Programs', href: '/portal/programs' },
+          { label: 'New', href: '/portal/programs/new' },
+        ]}
+      />
 
       {error && (
-        <div style={{ color: '#dc3545', marginBottom: '1rem', padding: '0.5rem', background: '#f8d7da', borderRadius: '4px' }}>
+        <Alert variant="danger" className="mb-6">
           {error}
-        </div>
+        </Alert>
       )}
 
-      <form onSubmit={handleSubmit} style={{ maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Program Name *</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-          />
-        </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Degree Level *</label>
-          <select
-            value={degreeLevel}
-            onChange={(e) => setDegreeLevel(e.target.value)}
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-          >
-            <option value="undergraduate">Undergraduate</option>
-            <option value="postgraduate">Postgraduate</option>
-          </select>
-        </div>
-        <div>
-          <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Description</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-            style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem', resize: 'vertical' }}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <div style={{ flex: 1 }}>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Fee Amount *</label>
-            <input
-              type="number"
-              step="0.01"
-              value={feeAmount}
-              onChange={(e) => setFeeAmount(e.target.value)}
-              required
-              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-            />
-          </div>
-          <div style={{ width: '120px' }}>
-            <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Currency</label>
-            <select
-              value={feeCurrency}
-              onChange={(e) => setFeeCurrency(e.target.value)}
-              style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
+      <Card padding="lg" className="max-w-2xl">
+        <div className="space-y-8">
+          <section>
+            <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+              Program Details
+            </h2>
+            <div className="space-y-4">
+              <FormField label="Name" htmlFor="name" required>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  placeholder="e.g. Bachelor of Computer Science"
+                />
+              </FormField>
+              <FormField label="Degree Level" htmlFor="degreeLevel" required>
+                <Select
+                  id="degreeLevel"
+                  value={degreeLevel}
+                  onChange={(e) => setDegreeLevel(e.target.value)}
+                >
+                  <option value="undergraduate">Undergraduate</option>
+                  <option value="postgraduate">Postgraduate</option>
+                </Select>
+              </FormField>
+              <FormField label="Description" htmlFor="description">
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  rows={4}
+                  placeholder="Program description"
+                />
+              </FormField>
+              <FormField
+                label="Requirements"
+                htmlFor="requirements"
+                hint="Entry requirements, qualifications needed"
+              >
+                <Textarea
+                  id="requirements"
+                  value={requirements}
+                  onChange={(e) => setRequirements(e.target.value)}
+                  rows={4}
+                  placeholder="Admission requirements"
+                />
+              </FormField>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+              Application Fee
+            </h2>
+            <div className="flex gap-4 items-start">
+              <div className="flex-1">
+                <FormField label="Fee Amount" htmlFor="feeAmount" required>
+                  <Input
+                    id="feeAmount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={feeAmount}
+                    onChange={(e) => setFeeAmount(e.target.value)}
+                    required
+                    placeholder="0.00"
+                  />
+                </FormField>
+              </div>
+              <div className="w-32">
+                <FormField label="Currency" htmlFor="currency">
+                  <Select id="currency" value="USD" disabled>
+                    <option value="USD">USD</option>
+                  </Select>
+                </FormField>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
+              Required Documents
+            </h2>
+            <div className="space-y-3">
+              {docs.map((doc, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <div className="flex-1">
+                    <Input
+                      placeholder="Type (e.g. transcript)"
+                      value={doc.type}
+                      onChange={(e) => handleDocChange(i, 'type', e.target.value)}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <Input
+                      placeholder="Label"
+                      value={doc.label}
+                      onChange={(e) => handleDocChange(i, 'label', e.target.value)}
+                    />
+                  </div>
+                  {docs.length > 1 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeDocRow(i)}
+                      className="mt-1 shrink-0"
+                      aria-label="Remove document"
+                    >
+                      <X size={16} />
+                    </Button>
+                  )}
+                </div>
+              ))}
+              <Button variant="ghost" size="sm" icon={<Plus size={16} />} onClick={addDocRow}>
+                Add Document
+              </Button>
+            </div>
+          </section>
+
+          <div className="flex items-center gap-3 pt-4 border-t border-border">
+            <Button
+              variant="secondary"
+              loading={saving}
+              onClick={() => handleSubmit('draft')}
             >
-              <option value="USD">USD</option>
-              <option value="ETB">ETB</option>
-              <option value="EUR">EUR</option>
-            </select>
+              Save as Draft
+            </Button>
+            <Button
+              variant="primary"
+              loading={saving}
+              onClick={() => handleSubmit('published')}
+            >
+              Save &amp; Publish
+            </Button>
           </div>
         </div>
-        <button
-          type="submit"
-          disabled={saving}
-          style={{
-            padding: '0.6rem 1.5rem',
-            background: saving ? '#6c757d' : '#198754',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '1rem',
-            cursor: saving ? 'not-allowed' : 'pointer',
-            alignSelf: 'flex-start',
-          }}
-        >
-          {saving ? 'Creating...' : 'Create Program'}
-        </button>
-      </form>
+      </Card>
     </div>
   )
 }

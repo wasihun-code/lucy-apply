@@ -4,6 +4,7 @@ type Status =
   | 'draft' | 'submitted' | 'under_review' | 'admitted'
   | 'rejected' | 'waitlisted' | 'accepted' | 'declined'
   | 'active' | 'inactive' | 'published' | 'pending' | 'archived'
+  | 'scheduled' | 'open' | 'closed'
 
 const statusConfig: Record<Status, { label: string; className: string }> = {
   draft:       { label: 'Draft',       className: 'bg-neutral/10 text-neutral border-neutral/20' },
@@ -19,6 +20,9 @@ const statusConfig: Record<Status, { label: string; className: string }> = {
   published:   { label: 'Published',   className: 'bg-success/10 text-success border-success/20' },
   pending:     { label: 'Pending',     className: 'bg-warning/10 text-warning border-warning/20' },
   archived:    { label: 'Archived',    className: 'bg-neutral/10 text-neutral border-neutral/20' },
+  scheduled:   { label: 'Scheduled',   className: 'bg-neutral/10 text-neutral border-neutral/20' },
+  open:        { label: 'Open',        className: 'bg-success/10 text-success border-success/20' },
+  closed:      { label: 'Closed',      className: 'bg-danger/10 text-danger border-danger/20' },
 }
 
 export function StatusBadge({ status, label }: { status: string; label?: string }) {

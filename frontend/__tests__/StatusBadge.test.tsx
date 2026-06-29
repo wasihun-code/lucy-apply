@@ -16,6 +16,9 @@ describe('StatusBadge', () => {
     { status: 'published', expectedLabel: 'Published' },
     { status: 'pending', expectedLabel: 'Pending' },
     { status: 'archived', expectedLabel: 'Archived' },
+    { status: 'scheduled', expectedLabel: 'Scheduled' },
+    { status: 'open', expectedLabel: 'Open' },
+    { status: 'closed', expectedLabel: 'Closed' },
   ]
 
   statuses.forEach(({ status, expectedLabel }) => {
@@ -46,5 +49,23 @@ describe('StatusBadge', () => {
     render(<StatusBadge status="admitted" />)
     const badge = screen.getByText('Admitted')
     expect(badge.className).toContain('text-accent')
+  })
+
+  it('applies success/green color for open', () => {
+    render(<StatusBadge status="open" />)
+    const badge = screen.getByText('Open')
+    expect(badge.className).toContain('text-success')
+  })
+
+  it('applies danger/red color for closed', () => {
+    render(<StatusBadge status="closed" />)
+    const badge = screen.getByText('Closed')
+    expect(badge.className).toContain('text-danger')
+  })
+
+  it('applies neutral/gray color for scheduled', () => {
+    render(<StatusBadge status="scheduled" />)
+    const badge = screen.getByText('Scheduled')
+    expect(badge.className).toContain('text-neutral')
   })
 })

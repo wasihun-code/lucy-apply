@@ -2,8 +2,16 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { getMe } from '@/lib/auth'
+import { formatDate } from '@/lib/utils'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { Select } from '@/components/ui/Select'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Alert } from '@/components/ui/Alert'
+import { Skeleton } from '@/components/ui/Skeleton'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { BookOpen, Pencil } from 'lucide-react'
 
 async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `/api/proxy/${path.replace(/^\//, '')}`
@@ -32,31 +40,32 @@ interface ProgramItem {
   created_at: string
 }
 
-interface MeResponse {
-  role: string
-  university?: string
-  permission_level?: string
-}
+const STATUS_FILTERS = ['all', 'draft', 'published', 'archived'] as const
 
 export default function ProgramsPage() {
   const router = useRouter()
   const [programs, setPrograms] = useState<ProgramItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [me, setMe] = useState<MeResponse | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [me, setMe] = useState<{ university?: string; permission_level?: string } | null>(null)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
 
   useEffect(() => {
     getMe().then((m) => {
       if (!m) { router.push('/login'); return }
-      const meData: MeResponse = { role: m.role, university: m.university, permission_level: m.permission_level || '' }
-      setMe(meData)
       if (m.role !== 'universitystaff') { router.push('/dashboard'); return }
       if (!m.university) { setLoading(false); return }
+      setMe({ university: m.university, permission_level: m.permission_level })
 
       return authFetch<{ results: ProgramItem[] }>(
-        `universities/${m.university}/programs/`
-      ).then((data) => {
-        setPrograms(data.results || [])
-      })
+        `universities/${m.university}/programs/`,
+      )
+        .then((data) => {
+          setPrograms(data.results || [])
+        })
+        .catch((e) => {
+          setError(e instanceof Error ? e.message : 'Failed to load programs')
+        })
     }).catch(() => {
       router.push('/login')
     }).finally(() => {
@@ -64,96 +73,114 @@ export default function ProgramsPage() {
     })
   }, [router])
 
-  if (loading) return <p>Loading programs...</p>
+  const isAdmin = me?.permission_level === 'admin'
+
+  const filtered = statusFilter === 'all'
+    ? programs
+    : programs.filter((p) => p.status === statusFilter)
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-32" />
+        <Skeleton className="h-4 w-64" />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full rounded-lg" />
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-        <h2 style={{ margin: 0 }}>Programs</h2>
-        {me?.permission_level === 'admin' && (
-          <Link
-            href="/portal/programs/new"
-            style={{
-              padding: '0.5rem 1rem',
-              background: '#198754',
-              color: '#fff',
-              borderRadius: '6px',
-              textDecoration: 'none',
-              fontSize: '0.9rem',
-            }}
-          >
-            + New Program
-          </Link>
+      <PageHeader
+        title="Programs"
+        action={
+          isAdmin && (
+            <Button variant="primary" size="sm" onClick={() => router.push('/portal/programs/new')}>
+              + New Program
+            </Button>
+          )
+        }
+      />
+
+      {error && (
+        <Alert variant="danger" className="mb-6">
+          {error}
+        </Alert>
+      )}
+
+      <div className="flex items-center gap-3 mb-6">
+        <label className="text-sm font-body font-medium text-text-600 shrink-0">
+          Status:
+        </label>
+        <Select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="w-40"
+        >
+          {STATUS_FILTERS.map((s) => (
+            <option key={s} value={s}>
+              {s === 'all' ? 'All' : s.charAt(0).toUpperCase() + s.slice(1)}
+            </option>
+          ))}
+        </Select>
+        {statusFilter !== 'all' && (
+          <Button variant="ghost" size="sm" onClick={() => setStatusFilter('all')}>
+            Clear
+          </Button>
         )}
       </div>
 
-      {programs.length === 0 ? (
-        <p style={{ color: '#666' }}>
-          No programs yet. {me?.permission_level === 'admin' ? (
-            <Link href="/portal/programs/new">Create your first program</Link>
-          ) : ''}
-        </p>
+      {filtered.length === 0 ? (
+        <EmptyState
+          icon={<BookOpen size={32} className="text-text-400" />}
+          heading="No programs yet"
+          description="Create your first program to start accepting applications."
+          action={
+            isAdmin ? { label: '+ New Program', href: '/portal/programs/new' } : undefined
+          }
+        />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '700px' }}>
-          {programs.map((p) => (
+        <div className="flex flex-col gap-3 max-w-3xl">
+          {filtered.map((p) => (
             <div
               key={p.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.75rem 1rem',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-              }}
+              className="flex items-center justify-between bg-surface rounded-lg border border-border shadow-sm p-4"
             >
-              <div>
-                <strong>{p.name}</strong>
-                <br />
-                <span style={{ fontSize: '0.8rem', color: '#666' }}>
-                  {p.degree_level} &middot; {p.fee_currency} {p.fee_amount}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: '4px',
-                    background: p.status === 'published' ? '#d1e7dd' : p.status === 'draft' ? '#e9ecef' : '#fff3cd',
-                    color: p.status === 'published' ? '#0f5132' : '#666',
-                  }}
+              <div className="min-w-0">
+                <p
+                  className={`text-base font-display font-semibold text-text-900 truncate ${
+                    p.status === 'archived' ? 'line-through text-text-400' : ''
+                  }`}
                 >
-                  {p.status}
-                </span>
-                {me?.permission_level === 'admin' && (
-                  <Link
-                    href={`/portal/programs/${p.id}/edit`}
-                    style={{
-                      padding: '0.3rem 0.6rem',
-                      background: '#0d6efd',
-                      color: '#fff',
-                      borderRadius: '4px',
-                      textDecoration: 'none',
-                      fontSize: '0.8rem',
-                    }}
-                  >
-                    Edit
-                  </Link>
-                )}
-                <Link
-                  href={`/portal/programs/${p.id}/cycles`}
-                  style={{
-                    padding: '0.3rem 0.6rem',
-                    background: '#6c757d',
-                    color: '#fff',
-                    borderRadius: '4px',
-                    textDecoration: 'none',
-                    fontSize: '0.8rem',
-                  }}
+                  {p.name}
+                </p>
+                <p className="text-sm font-body font-normal text-text-600 mt-0.5">
+                  {p.degree_level} &middot; {p.fee_currency} {p.fee_amount}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 ml-4">
+                <StatusBadge status={p.status} />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => router.push(`/portal/programs/${p.id}/cycles`)}
                 >
                   Cycles
-                </Link>
+                </Button>
+                {isAdmin && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.push(`/portal/programs/${p.id}/edit`)}
+                    aria-label={`Edit ${p.name}`}
+                  >
+                    <Pencil size={16} />
+                  </Button>
+                )}
               </div>
             </div>
           ))}

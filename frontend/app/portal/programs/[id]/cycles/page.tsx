@@ -1,9 +1,35 @@
 'use client'
 
-import { useCallback, useEffect, useState, FormEvent } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
-import Link from 'next/link'
 import { getMe } from '@/lib/auth'
+import { formatDate } from '@/lib/utils'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Alert } from '@/components/ui/Alert'
+import { Modal } from '@/components/ui/Modal'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Table, type Column } from '@/components/ui/Table'
+import { Calendar } from 'lucide-react'
+
+async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = `/api/proxy/${path.replace(/^\//, '')}`
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    throw new Error(msg)
+  }
+  return res.json()
+}
 
 interface Cycle {
   id: string
@@ -13,46 +39,47 @@ interface Cycle {
   status: string
 }
 
-interface MeResponse {
-  role: string
-  permission_level?: string
-}
-
 export default function CyclesPage() {
   const router = useRouter()
   const params = useParams()
   const programId = params?.id as string
 
-  const [me, setMe] = useState<MeResponse | null>(null)
-  const [programName, setProgramName] = useState('')
-  const [cycles, setCycles] = useState<Cycle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [me, setMe] = useState<{ role: string; permission_level?: string } | null>(null)
+  const [programName, setProgramName] = useState('')
+  const [cycles, setCycles] = useState<Cycle[]>([])
 
-  const [showNewForm, setShowNewForm] = useState(false)
+  const [newModalOpen, setNewModalOpen] = useState(false)
   const [newName, setNewName] = useState('')
   const [newOpenDate, setNewOpenDate] = useState('')
   const [newCloseDate, setNewCloseDate] = useState('')
+  const [newDateError, setNewDateError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
+
+  const [confirmAction, setConfirmAction] = useState<{
+    cycleId: string
+    action: 'close' | 'archive'
+  } | null>(null)
 
   const loadData = useCallback(async () => {
     if (!programId) return
     try {
       const m = await getMe()
-      if (!m) { router.push('/portal/programs'); return }
-      setMe(m as MeResponse)
-      if (m.role !== 'universitystaff') { router.push('/portal/programs'); return }
+      if (!m || m.role !== 'universitystaff') {
+        router.push('/portal/programs')
+        return
+      }
+      setMe(m as { role: string; permission_level?: string })
 
       const [progRes, cycRes] = await Promise.all([
-        fetch(`/api/proxy/programs/${programId}/`),
-        fetch(`/api/proxy/programs/${programId}/cycles/`),
+        authFetch<{ name: string }>(`programs/${programId}/`),
+        authFetch<Cycle[] | { results: Cycle[] }>(`programs/${programId}/cycles/`),
       ])
-      if (!progRes.ok || !cycRes.ok) throw new Error('Failed to load')
-      const prog = await progRes.json() as { name: string }
-      const cyc = await cycRes.json() as Cycle[]
-      setProgramName(prog.name)
-      setCycles(Array.isArray(cyc) ? cyc : (cyc as unknown as { results: Cycle[] }).results || [])
+      setProgramName(progRes.name)
+      const raw = cycRes as Cycle[] | { results: Cycle[] }
+      setCycles(Array.isArray(raw) ? raw : raw.results || [])
     } catch {
       router.push('/portal/programs')
     } finally {
@@ -62,27 +89,31 @@ export default function CyclesPage() {
 
   useEffect(() => { loadData() }, [loadData])
 
-  async function handleCreateCycle(e: FormEvent) {
-    e.preventDefault()
+  const isAdmin = me?.permission_level === 'admin'
+
+  async function handleCreateCycle() {
     if (!programId || creating) return
+
+    if (!newName.trim() || !newOpenDate || !newCloseDate) return
+
+    if (new Date(newCloseDate) <= new Date(newOpenDate)) {
+      setNewDateError('Close date must be after open date.')
+      return
+    }
+    setNewDateError(null)
     setCreating(true)
     setError(null)
 
     try {
-      const res = await fetch(`/api/proxy/programs/${programId}/cycles/`, {
+      await authFetch(`programs/${programId}/cycles/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newName,
           open_date: newOpenDate,
           close_date: newCloseDate,
         }),
       })
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
-      }
-      setShowNewForm(false)
+      setNewModalOpen(false)
       setNewName('')
       setNewOpenDate('')
       setNewCloseDate('')
@@ -95,14 +126,12 @@ export default function CyclesPage() {
     }
   }
 
-  async function handleClose(cycleId: string) {
-    if (!confirm('Close this cycle? New applications will be blocked.')) return
+  async function handleCloseCycle(cycleId: string) {
+    setConfirmAction(null)
+    setError(null)
+    setSuccess(null)
     try {
-      const res = await fetch(`/api/proxy/admission-cycles/${cycleId}/close/`, { method: 'PATCH' })
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
-      }
+      await authFetch(`admission-cycles/${cycleId}/close/`, { method: 'PATCH' })
       setSuccess('Cycle closed.')
       await loadData()
     } catch (e) {
@@ -110,14 +139,12 @@ export default function CyclesPage() {
     }
   }
 
-  async function handleArchive(cycleId: string) {
-    if (!confirm('Archive this cycle? This action cannot be undone.')) return
+  async function handleArchiveCycle(cycleId: string) {
+    setConfirmAction(null)
+    setError(null)
+    setSuccess(null)
     try {
-      const res = await fetch(`/api/proxy/admission-cycles/${cycleId}/archive/`, { method: 'PATCH' })
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || `HTTP ${res.status}`)
-      }
+      await authFetch(`admission-cycles/${cycleId}/archive/`, { method: 'PATCH' })
       setSuccess('Cycle archived.')
       await loadData()
     } catch (e) {
@@ -125,208 +152,244 @@ export default function CyclesPage() {
     }
   }
 
-  const isAdmin = me?.permission_level === 'admin'
+  const columns: Column<Cycle>[] = [
+    {
+      key: 'name',
+      header: 'Cycle Name',
+      render: (c) => <span className="font-medium">{c.name}</span>,
+    },
+    {
+      key: 'open_date',
+      header: 'Opens',
+      render: (c) => (
+        <span className="text-text-600">{formatDate(c.open_date)}</span>
+      ),
+    },
+    {
+      key: 'close_date',
+      header: 'Closes',
+      render: (c) => (
+        <span className="text-text-600">{formatDate(c.close_date)}</span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (c) => <StatusBadge status={c.status} />,
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (c) => {
+        if (!isAdmin) return null
+        if (c.status === 'open') {
+          return (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                setConfirmAction({ cycleId: c.id, action: 'close' })
+              }}
+            >
+              Close Early
+            </Button>
+          )
+        }
+        if (c.status === 'closed') {
+          return (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                setConfirmAction({ cycleId: c.id, action: 'archive' })
+              }}
+            >
+              Archive
+            </Button>
+          )
+        }
+        return null
+      },
+    },
+  ]
 
-  if (loading) return <p>Loading cycles...</p>
+  if (loading) return null
 
   return (
     <div>
-      <Link href="/portal/programs" style={{ fontSize: '0.875rem', display: 'inline-block', marginBottom: '1rem' }}>
-        &larr; Back to Programs
-      </Link>
-      <h2 style={{ marginBottom: '1rem' }}>Admission Cycles — {programName}</h2>
+      <PageHeader
+        title="Admission Cycles"
+        breadcrumb={[
+          { label: 'Programs', href: '/portal/programs' },
+          { label: programName, href: `/portal/programs/${programId}/edit` },
+          { label: 'Cycles', href: '#' },
+        ]}
+        action={
+          isAdmin && (
+            <Button variant="primary" size="sm" onClick={() => setNewModalOpen(true)}>
+              + New Cycle
+            </Button>
+          )
+        }
+      />
 
       {error && (
-        <div style={{ color: '#dc3545', marginBottom: '1rem', padding: '0.5rem', background: '#f8d7da', borderRadius: '4px' }}>
+        <Alert variant="danger" className="mb-6">
           {error}
-        </div>
+        </Alert>
       )}
+
       {success && (
-        <div style={{ color: '#0f5132', marginBottom: '1rem', padding: '0.5rem', background: '#d1e7dd', borderRadius: '4px' }}>
+        <Alert variant="success" className="mb-6">
           {success}
-        </div>
-      )}
-
-      {isAdmin && !showNewForm && (
-        <button
-          onClick={() => setShowNewForm(true)}
-          style={{
-            padding: '0.5rem 1rem',
-            background: '#198754',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '0.9rem',
-            cursor: 'pointer',
-            marginBottom: '1rem',
-          }}
-        >
-          + New Admission Cycle
-        </button>
-      )}
-
-      {showNewForm && isAdmin && (
-        <form onSubmit={handleCreateCycle} style={{ maxWidth: '500px', marginBottom: '2rem', padding: '1rem', border: '1px solid #ddd', borderRadius: '6px' }}>
-          <h3 style={{ margin: '0 0 1rem' }}>New Admission Cycle</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Cycle Name *</label>
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                required
-                placeholder="e.g. Fall 2027"
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Open Date *</label>
-              <input
-                type="datetime-local"
-                value={newOpenDate}
-                onChange={(e) => setNewOpenDate(e.target.value)}
-                required
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-              />
-            </div>
-            <div>
-              <label style={{ display: 'block', marginBottom: '0.25rem', fontWeight: 500 }}>Close Date *</label>
-              <input
-                type="datetime-local"
-                value={newCloseDate}
-                onChange={(e) => setNewCloseDate(e.target.value)}
-                required
-                style={{ width: '100%', padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="submit"
-                disabled={creating}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: creating ? '#6c757d' : '#0d6efd',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: creating ? 'not-allowed' : 'pointer',
-                }}
-              >
-                {creating ? 'Creating...' : 'Create Cycle'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowNewForm(false)}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: '#6c757d',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </form>
+        </Alert>
       )}
 
       {cycles.length === 0 ? (
-        <p style={{ color: '#666' }}>No admission cycles yet for this program.</p>
+        <EmptyState
+          icon={<Calendar size={32} className="text-text-400" />}
+          heading="No admission cycles"
+          description="Create a cycle to start accepting applications for this program."
+          action={
+            isAdmin
+              ? { label: '+ New Cycle', onClick: () => setNewModalOpen(true) }
+              : undefined
+          }
+        />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '600px' }}>
-          {cycles.map((c) => (
-            <div
-              key={c.id}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '0.75rem 1rem',
-                border: '1px solid #ddd',
-                borderRadius: '6px',
+        <Table<Cycle>
+          columns={columns}
+          data={cycles}
+        />
+      )}
+
+      <Modal
+        open={newModalOpen}
+        onClose={() => {
+          setNewModalOpen(false)
+          setNewDateError(null)
+        }}
+        title="New Admission Cycle"
+      >
+        <div className="space-y-4">
+          <div>
+            <label
+              htmlFor="cycleName"
+              className="text-sm font-body font-medium text-text-600"
+            >
+              Cycle Name <span className="text-danger">*</span>
+            </label>
+            <Input
+              id="cycleName"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="e.g. Fall 2027"
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="openDate"
+              className="text-sm font-body font-medium text-text-600"
+            >
+              Open Date <span className="text-danger">*</span>
+            </label>
+            <Input
+              id="openDate"
+              type="datetime-local"
+              value={newOpenDate}
+              onChange={(e) => setNewOpenDate(e.target.value)}
+              className="mt-1.5"
+            />
+          </div>
+          <div>
+            <label
+              htmlFor="closeDate"
+              className="text-sm font-body font-medium text-text-600"
+            >
+              Close Date <span className="text-danger">*</span>
+            </label>
+            <Input
+              id="closeDate"
+              type="datetime-local"
+              value={newCloseDate}
+              onChange={(e) => setNewCloseDate(e.target.value)}
+              className="mt-1.5"
+            />
+            {newDateError && (
+              <p className="text-xs text-danger mt-1">{newDateError}</p>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setNewModalOpen(false)
+                setNewDateError(null)
               }}
             >
-              <div>
-                <strong>{c.name}</strong>
-                <br />
-                <span style={{ fontSize: '0.8rem', color: '#666' }}>
-                  {new Date(c.open_date).toLocaleDateString()} &ndash; {new Date(c.close_date).toLocaleDateString()}
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <span
-                  style={{
-                    fontSize: '0.75rem',
-                    padding: '0.2rem 0.5rem',
-                    borderRadius: '4px',
-                    background: cycleStatusBg(c.status),
-                    color: cycleStatusColor(c.status),
-                    fontWeight: 600,
-                  }}
-                >
-                  {c.status}
-                </span>
-                {isAdmin && c.status === 'open' && (
-                  <button
-                    onClick={() => handleClose(c.id)}
-                    style={{
-                      padding: '0.3rem 0.6rem',
-                      background: '#ffc107',
-                      color: '#333',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Close Early
-                  </button>
-                )}
-                {isAdmin && c.status === 'closed' && (
-                  <button
-                    onClick={() => handleArchive(c.id)}
-                    style={{
-                      padding: '0.3rem 0.6rem',
-                      background: '#dc3545',
-                      color: '#fff',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontSize: '0.8rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Archive
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={creating}
+              onClick={handleCreateCycle}
+            >
+              Create Cycle
+            </Button>
+          </div>
         </div>
-      )}
+      </Modal>
+
+      <Modal
+        open={confirmAction?.action === 'close'}
+        onClose={() => setConfirmAction(null)}
+        title="Close Cycle Early"
+      >
+        <p className="text-sm text-text-600 mb-6">
+          This cycle will be closed immediately. New applications will be blocked.
+          Are you sure?
+        </p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setConfirmAction(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (confirmAction) handleCloseCycle(confirmAction.cycleId)
+            }}
+          >
+            Close Early
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmAction?.action === 'archive'}
+        onClose={() => setConfirmAction(null)}
+        title="Archive Cycle"
+      >
+        <p className="text-sm text-text-600 mb-6">
+          This cycle will be archived and its data preserved. This action cannot be
+          undone. Are you sure?
+        </p>
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setConfirmAction(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (confirmAction) handleArchiveCycle(confirmAction.cycleId)
+            }}
+          >
+            Archive
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
-}
-
-function cycleStatusBg(status: string): string {
-  switch (status) {
-    case 'scheduled': return '#e9ecef'
-    case 'open': return '#d1e7dd'
-    case 'closed': return '#f8d7da'
-    case 'archived': return '#e9ecef'
-    default: return '#e9ecef'
-  }
-}
-
-function cycleStatusColor(status: string): string {
-  switch (status) {
-    case 'scheduled': return '#666'
-    case 'open': return '#0f5132'
-    case 'closed': return '#842029'
-    case 'archived': return '#666'
-    default: return '#666'
-  }
 }
