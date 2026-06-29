@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getMe } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/api'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -24,7 +25,12 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
   })
   if (!res.ok) {
     const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    let msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    try {
+      const json = JSON.parse(text)
+      const extracted = json?.detail || json?.message || json?.error?.message || json?.error
+      if (extracted) msg = String(extracted)
+    } catch {}
     throw new Error(msg)
   }
   return res.json()
@@ -102,7 +108,7 @@ export default function NewProgramPage() {
       })
       router.push('/portal/programs')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create program')
+      setError(getErrorMessage(e))
     } finally {
       setSaving(false)
     }

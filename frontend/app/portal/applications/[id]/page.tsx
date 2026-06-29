@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getMe } from '@/lib/auth'
-import { formatDate } from '@/lib/utils'
-import { cn } from '@/lib/utils'
+import { formatDate, cn } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/api'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
@@ -79,7 +79,12 @@ async function authFetch<T>(
   })
   if (!res.ok) {
     const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    let msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    try {
+      const json = JSON.parse(text)
+      const extracted = json?.detail || json?.message || json?.error?.message || json?.error
+      if (extracted) msg = String(extracted)
+    } catch {}
     throw new Error(msg)
   }
   return res.json()
@@ -127,7 +132,7 @@ export default function ApplicationDetailPage() {
         setHistory(historyData)
       })
       .catch((e) => {
-        setError(e instanceof Error ? e.message : 'Failed to load application')
+        setError(getErrorMessage(e))
       })
       .finally(() => setLoading(false))
   }, [id])
@@ -166,7 +171,7 @@ export default function ApplicationDetailPage() {
       await authFetch(`documents/${docId}/verify/`, { method: 'PATCH' })
       await fetchData()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Verify failed')
+      setError(getErrorMessage(e))
     } finally {
       setVerifyingDocId(null)
     }
@@ -185,7 +190,7 @@ export default function ApplicationDetailPage() {
       setFlagReason('')
       await fetchData()
     } catch (e) {
-      setFlagError(e instanceof Error ? e.message : 'Flag failed')
+      setFlagError(getErrorMessage(e))
     } finally {
       setFlagging(false)
     }
@@ -199,7 +204,7 @@ export default function ApplicationDetailPage() {
       })
       await fetchData()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to open for review')
+      setError(getErrorMessage(e))
     }
   }
 
@@ -215,7 +220,7 @@ export default function ApplicationDetailPage() {
       setDecisionTarget(null)
       await fetchData()
     } catch (e) {
-      setDecisionError(e instanceof Error ? e.message : 'Decision failed')
+      setDecisionError(getErrorMessage(e))
     } finally {
       setDeciding(false)
     }
@@ -237,7 +242,7 @@ export default function ApplicationDetailPage() {
       setReverseReason('')
       await fetchData()
     } catch (e) {
-      setReverseError(e instanceof Error ? e.message : 'Reverse failed')
+      setReverseError(getErrorMessage(e))
     } finally {
       setReversing(false)
     }

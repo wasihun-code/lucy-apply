@@ -15,6 +15,7 @@ import { WizardSidebar } from '@/components/shared/WizardSidebar'
 import { Button } from '@/components/ui/Button'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { Alert } from '@/components/ui/Alert'
+import { getErrorMessage } from '@/lib/api'
 import type {
   Application,
   ApplicationDocument,
@@ -43,7 +44,12 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
   })
   if (!res.ok) {
     const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    let msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    try {
+      const json = JSON.parse(text)
+      const extracted = json?.detail || json?.message || json?.error?.message || json?.error
+      if (extracted) msg = String(extracted)
+    } catch {}
     throw new Error(msg)
   }
   return res.json()
@@ -171,13 +177,13 @@ export default function WizardLayout({ children }: { children: React.ReactNode }
 
         initialized.current = true
       } catch (e) {
-        const msg = e instanceof Error ? e.message : ''
+        const msg = getErrorMessage(e)
         if (msg.includes('permission') || msg.includes('403') || msg.includes('Forbidden')) {
           setError('Cannot create application. Make sure your email is verified.')
-        } else if (msg.includes('CYCLE_CLOSED')) {
+        } else if (msg.includes('CYCLE_CLOSED') || msg.includes('closed') || msg.includes('archived')) {
           setError('This admission cycle is closed. Please select another cycle.')
         } else {
-          setError('Failed to load application. Please try again.')
+          setError(msg || 'Failed to load application. Please try again.')
         }
       } finally {
         setLoading(false)
@@ -295,8 +301,8 @@ export default function WizardLayout({ children }: { children: React.ReactNode }
       setSubmittingPhase('success')
       router.push(`/dashboard/apply/${programId}/confirmation?appId=${application.id}`)
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Submission failed'
-      if (msg.includes('CYCLE_CLOSED')) {
+      const msg = getErrorMessage(e)
+      if (msg.includes('CYCLE_CLOSED') || msg.includes('closed') || msg.includes('archived')) {
         setSubmitError('This admission cycle is closed. Applications are no longer being accepted.')
       } else if (msg.includes('MISSING_DOCS')) {
         setSubmitError('Not all required documents have been uploaded. Please check the Documents section.')
@@ -350,7 +356,12 @@ export default function WizardLayout({ children }: { children: React.ReactNode }
 
       if (!res.ok) {
         const text = await res.text()
-        const msg = text.length > 200 ? 'Upload failed' : text || 'Upload failed'
+        let msg = text.length > 200 ? 'Upload failed' : text || 'Upload failed'
+        try {
+          const json = JSON.parse(text)
+          const extracted = json?.detail || json?.message || json?.error?.message || json?.error
+          if (extracted) msg = String(extracted)
+        } catch {}
         throw new Error(msg)
       }
 

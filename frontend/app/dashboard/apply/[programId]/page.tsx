@@ -35,7 +35,12 @@ async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T>
   })
   if (!res.ok) {
     const text = await res.text()
-    const msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    let msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    try {
+      const json = JSON.parse(text)
+      const extracted = json?.detail || json?.message || json?.error?.message || json?.error
+      if (extracted) msg = String(extracted)
+    } catch {}
     throw new Error(msg)
   }
   return res.json()

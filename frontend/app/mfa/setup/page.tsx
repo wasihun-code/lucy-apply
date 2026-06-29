@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getMe } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/api'
 
 export default function MFASetupPage() {
   const router = useRouter()
@@ -26,7 +27,7 @@ export default function MFASetupPage() {
             setError(data.error?.message || 'Failed to setup MFA')
           }
         })
-        .catch((e) => setError(e.message))
+        .catch((e) => setError(e instanceof Error ? e.message : 'Failed to setup MFA'))
         .finally(() => setLoading(false))
     })
   }, [router])

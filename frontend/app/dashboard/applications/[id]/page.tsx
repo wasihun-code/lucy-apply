@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getMe } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
+import { getErrorMessage } from '@/lib/api'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
@@ -38,8 +39,12 @@ async function authFetch<T>(
   })
   if (!res.ok) {
     const text = await res.text()
-    const msg =
-      text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    let msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    try {
+      const json = JSON.parse(text)
+      const extracted = json?.detail || json?.message || json?.error?.message || json?.error
+      if (extracted) msg = String(extracted)
+    } catch {}
     throw new Error(msg)
   }
   return res.json()
@@ -84,9 +89,7 @@ export default function ApplicationDetailPage() {
         setHistory(hist || [])
         setDocuments(docs || [])
       } catch (e) {
-        setError(
-          e instanceof Error ? e.message : 'Failed to load application',
-        )
+        setError(getErrorMessage(e))
       } finally {
         setLoading(false)
       }
@@ -136,9 +139,7 @@ export default function ApplicationDetailPage() {
       setShowOfferModal(false)
       setPendingResponse(null)
     } catch (e) {
-      setRespondError(
-        e instanceof Error ? e.message : 'Failed to respond',
-      )
+      setRespondError(getErrorMessage(e))
     } finally {
       setResponding(false)
     }
@@ -197,7 +198,7 @@ export default function ApplicationDetailPage() {
         )
         setDocuments(docs || [])
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Upload failed')
+        setError(getErrorMessage(e))
       } finally {
         setUploading(null)
       }

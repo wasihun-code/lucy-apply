@@ -1,9 +1,43 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { getMe } from '@/lib/auth'
+import { getErrorMessage } from '@/lib/api'
 import type { StaffMember } from '@/lib/api'
+import { PageHeader } from '@/components/shared/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { FormField } from '@/components/ui/FormField'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Alert } from '@/components/ui/Alert'
+import { Modal } from '@/components/ui/Modal'
+import { Table, type Column } from '@/components/ui/Table'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Users, Trash2 } from 'lucide-react'
+
+async function authFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const url = `/api/proxy/${path.replace(/^\//, '')}`
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    let msg = text.length > 200 ? `HTTP ${res.status}` : text || `HTTP ${res.status}`
+    try {
+      const json = JSON.parse(text)
+      const extracted = json?.detail || json?.message || json?.error?.message || json?.error
+      if (extracted) msg = String(extracted)
+    } catch {}
+    throw new Error(msg)
+  }
+  return res.json()
+}
 
 export default function TeamPage() {
   const router = useRouter()
@@ -11,189 +45,251 @@ export default function TeamPage() {
   const [universityId, setUniversityId] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
 
-  const [inviteEmail, setInviteEmail] = useState('')
+  const [inviteModalOpen, setInviteModalOpen] = useState(false)
   const [inviteName, setInviteName] = useState('')
+  const [inviteEmail, setInviteEmail] = useState('')
   const [inviteLevel, setInviteLevel] = useState('officer')
   const [inviting, setInviting] = useState(false)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+
+  const [removeTarget, setRemoveTarget] = useState<StaffMember | null>(null)
+  const [removing, setRemoving] = useState(false)
+  const [removeError, setRemoveError] = useState<string | null>(null)
+
+  const loadData = useCallback(async () => {
+    const me = await getMe()
+    if (!me || !me.university) {
+      router.push('/login')
+      return
+    }
+    setUniversityId(me.university)
+    setIsAdmin(me.permission_level === 'admin')
+    try {
+      const data = await authFetch<StaffMember[]>(`universities/${me.university}/staff/`)
+      setStaff(data)
+    } catch (e) {
+      setError(getErrorMessage(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [router])
 
   useEffect(() => {
-    getMe().then(async (me) => {
-      if (!me || !me.university) {
-        router.push('/login')
-        return
-      }
-      setUniversityId(me.university)
-      setIsAdmin(me.permission_level === 'admin')
-      const res = await fetch(`/api/proxy/universities/${me.university}/staff/`)
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      setStaff(data)
-    }).catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [router])
+    loadData()
+  }, [loadData])
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault()
-    if (!universityId) return
+    if (!universityId || inviting) return
     setInviting(true)
-    setError('')
+    setInviteError(null)
     try {
-      const res = await fetch(`/api/proxy/universities/${universityId}/staff/`, {
+      await authFetch(`universities/${universityId}/staff/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: inviteEmail,
           full_name: inviteName,
           permission_level: inviteLevel,
         }),
       })
-      if (!res.ok) throw new Error(await res.text())
-      setInviteEmail('')
+      setInviteModalOpen(false)
       setInviteName('')
+      setInviteEmail('')
       setInviteLevel('officer')
-      const updatedRes = await fetch(`/api/proxy/universities/${universityId}/staff/`)
-      if (!updatedRes.ok) throw new Error(await updatedRes.text())
-      const updated = await updatedRes.json()
-      setStaff(updated)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to invite staff')
+      setSuccess('Staff member invited successfully.')
+      await loadData()
+    } catch (e) {
+      setInviteError(getErrorMessage(e))
     } finally {
       setInviting(false)
     }
   }
 
-  async function handleRemove(staffId: string) {
-    if (!confirm('Deactivate this staff member?')) return
-    if (!universityId) return
+  async function handleRemove() {
+    if (!removeTarget || !universityId || removing) return
+    setRemoving(true)
+    setRemoveError(null)
     try {
-      const res = await fetch(`/api/proxy/universities/${universityId}/staff/${staffId}/`, {
+      await authFetch(`universities/${universityId}/staff/${removeTarget.id}/`, {
         method: 'DELETE',
       })
-      if (!res.ok) throw new Error(await res.text())
-      const updatedRes = await fetch(`/api/proxy/universities/${universityId}/staff/`)
-      if (!updatedRes.ok) throw new Error(await updatedRes.text())
-      const updated = await updatedRes.json()
-      setStaff(updated)
-    } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Failed to remove staff')
+      setRemoveTarget(null)
+      setSuccess('Staff member removed.')
+      await loadData()
+    } catch (e) {
+      setRemoveError(getErrorMessage(e))
+    } finally {
+      setRemoving(false)
     }
   }
 
-  if (loading) return <p>Loading team...</p>
-  if (error) return <p style={{ color: 'red' }}>Error: {error}</p>
+  const columns: Column<StaffMember>[] = [
+    {
+      key: 'full_name',
+      header: 'Name',
+      render: (s) => <span className="font-medium text-text-900">{s.full_name}</span>,
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      render: (s) => <span className="text-text-400">{s.email}</span>,
+    },
+    {
+      key: 'permission_level',
+      header: 'Role',
+      render: (s) => <StatusBadge status={s.permission_level as 'admin' | 'officer'} />,
+    },
+    {
+      key: 'account_status',
+      header: 'Status',
+      render: (s) => <StatusBadge status={s.account_status as 'active' | 'inactive'} />,
+    },
+    ...(isAdmin
+      ? [
+          {
+            key: 'actions' as const,
+            header: 'Actions',
+            render: (s: StaffMember) =>
+              s.account_status === 'active' ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRemoveTarget(s)}
+                  aria-label={`Remove ${s.full_name}`}
+                >
+                  <Trash2 size={16} className="text-danger" />
+                </Button>
+              ) : null,
+          },
+        ]
+      : []),
+  ]
+
+  if (loading) return null
 
   return (
     <div>
-      <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>Team Members</h2>
+      <PageHeader
+        title="Team Members"
+        action={
+          isAdmin && (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setInviteModalOpen(true)
+                setInviteError(null)
+              }}
+            >
+              + Invite Staff
+            </Button>
+          )
+        }
+      />
 
-      <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fff', borderRadius: '6px', overflow: 'hidden', marginBottom: '2rem' }}>
-        <thead>
-          <tr style={{ background: '#f0f0f0', textAlign: 'left' }}>
-            <th style={{ padding: '0.75rem', borderBottom: '2px solid #ddd' }}>Name</th>
-            <th style={{ padding: '0.75rem', borderBottom: '2px solid #ddd' }}>Email</th>
-            <th style={{ padding: '0.75rem', borderBottom: '2px solid #ddd' }}>Permission</th>
-            <th style={{ padding: '0.75rem', borderBottom: '2px solid #ddd' }}>Status</th>
-            {isAdmin && <th style={{ padding: '0.75rem', borderBottom: '2px solid #ddd' }}>Actions</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {staff.map((s) => (
-            <tr key={s.id} style={{ borderBottom: '1px solid #eee' }}>
-              <td style={{ padding: '0.75rem' }}>{s.full_name}</td>
-              <td style={{ padding: '0.75rem' }}>{s.email}</td>
-              <td style={{ padding: '0.75rem' }}>
-                <span style={{
-                  padding: '0.2rem 0.5rem',
-                  borderRadius: '4px',
-                  fontSize: '0.8rem',
-                  background: s.permission_level === 'admin' ? '#cfe2ff' : '#e9ecef',
-                  color: s.permission_level === 'admin' ? '#084298' : '#666',
-                }}>
-                  {s.permission_level}
-                </span>
-              </td>
-              <td style={{ padding: '0.75rem' }}>
-                <span style={{
-                  padding: '0.2rem 0.5rem',
-                  borderRadius: '4px',
-                  fontSize: '0.8rem',
-                  background: s.account_status === 'active' ? '#d1e7dd' : '#f8d7da',
-                  color: s.account_status === 'active' ? '#0f5132' : '#842029',
-                }}>
-                  {s.account_status}
-                </span>
-              </td>
-              {isAdmin && (
-                <td style={{ padding: '0.75rem' }}>
-                  {s.account_status === 'active' && (
-                    <button
-                      onClick={() => handleRemove(s.id)}
-                      style={{
-                        padding: '0.25rem 0.6rem',
-                        background: '#dc3545',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem',
-                      }}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {success && (
+        <Alert variant="success" className="mb-6">
+          {success}
+        </Alert>
+      )}
 
-      {isAdmin && (
-        <>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Invite Staff Member</h3>
-          <form onSubmit={handleInvite} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '450px' }}>
-            <input
-              placeholder="Email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              required
-              style={{ padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
-            />
-            <input
-              placeholder="Full Name"
+      {error && (
+        <Alert variant="danger" className="mb-6">
+          {error}
+        </Alert>
+      )}
+
+      {staff.length === 0 ? (
+        <EmptyState
+          icon={<Users size={32} className="text-text-400" />}
+          heading="No team members"
+          description="Invite staff members to manage applications and programs."
+          action={
+            isAdmin
+              ? { label: '+ Invite Staff', onClick: () => setInviteModalOpen(true) }
+              : undefined
+          }
+        />
+      ) : (
+        <Table<StaffMember> columns={columns} data={staff} />
+      )}
+
+      <Modal
+        open={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+        title="Invite Staff Member"
+      >
+        <form onSubmit={handleInvite} className="space-y-4">
+          <FormField label="Full Name" htmlFor="inviteName" required>
+            <Input
+              id="inviteName"
               value={inviteName}
               onChange={(e) => setInviteName(e.target.value)}
               required
-              style={{ padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
+              placeholder="e.g. Jane Smith"
             />
-            <select
+          </FormField>
+          <FormField label="Email Address" htmlFor="inviteEmail" required>
+            <Input
+              id="inviteEmail"
+              type="email"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              required
+              placeholder="jane@university.edu"
+            />
+          </FormField>
+          <FormField label="Role" htmlFor="inviteRole" required>
+            <Select
+              id="inviteRole"
               value={inviteLevel}
               onChange={(e) => setInviteLevel(e.target.value)}
-              style={{ padding: '0.5rem', border: '1px solid #ccc', borderRadius: '4px' }}
             >
               <option value="officer">Officer</option>
               <option value="admin">Admin</option>
-            </select>
-            <button
-              type="submit"
-              disabled={inviting}
-              style={{
-                padding: '0.5rem 1.5rem',
-                background: inviting ? '#6c757d' : '#0d6efd',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: inviting ? 'not-allowed' : 'pointer',
-                alignSelf: 'flex-start',
-              }}
-            >
-              {inviting ? 'Inviting...' : 'Invite Staff'}
-            </button>
-          </form>
-        </>
-      )}
+            </Select>
+          </FormField>
+          {inviteError && (
+            <Alert variant="danger">{inviteError}</Alert>
+          )}
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setInviteModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" loading={inviting}>
+              Invite Staff
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={removeTarget !== null}
+        onClose={() => setRemoveTarget(null)}
+        title="Remove Staff Member"
+      >
+        <p className="text-sm text-text-600 mb-4">
+          Are you sure you want to remove{' '}
+          <strong>{removeTarget?.full_name}</strong> ({removeTarget?.email})?
+          This will deactivate their account.
+        </p>
+        {removeError && (
+          <Alert variant="danger" className="mb-4">
+            {removeError}
+          </Alert>
+        )}
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={() => setRemoveTarget(null)}>
+            Cancel
+          </Button>
+          <Button variant="danger" loading={removing} onClick={handleRemove}>
+            Remove Staff
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }

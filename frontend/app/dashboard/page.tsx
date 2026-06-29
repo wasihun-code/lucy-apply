@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ApplicationCard } from '@/components/shared/ApplicationCard'
 import { FileText, Clock, ClipboardCheck, CheckCircle2 } from 'lucide-react'
 import type { Application, PaginatedResponse } from '@/lib/api'
+import { getErrorMessage } from '@/lib/api'
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -39,7 +40,7 @@ export default function DashboardPage() {
         const appsData: PaginatedResponse<Application> = await appsRes.json()
         setApplications(appsData.results)
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Something went wrong')
+        setError(getErrorMessage(e))
       } finally {
         setLoading(false)
       }

@@ -10,10 +10,66 @@ export async function fetchAPI<T>(path: string, options?: RequestInit): Promise<
     ...options,
   })
   if (!res.ok) {
-    const error = await res.text()
-    throw new Error(error)
+    const body = await parseErrorBody(res)
+    throw new ApiError(res.status, body.message, body.raw)
   }
   return res.json()
+}
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+    public body?: unknown,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+function extractErrorMessage(json: unknown): string | null {
+  if (typeof json !== 'object' || !json) return null
+  const obj = json as Record<string, unknown>
+  if (typeof obj.detail === 'string') return obj.detail
+  if (typeof obj.message === 'string') return obj.message
+  const error = obj.error
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object') {
+    const errObj = error as Record<string, unknown>
+    if (typeof errObj.message === 'string') return errObj.message
+    if (typeof errObj.code === 'string') return errObj.code
+  }
+  return null
+}
+
+function parseErrorBody(res: Response): Promise<{ message: string; raw: unknown }> {
+  return res.text().then((text) => {
+    if (!text) return { message: `HTTP ${res.status}`, raw: null }
+    if (text.length > 200) return { message: `HTTP ${res.status}`, raw: text }
+    try {
+      const json = JSON.parse(text)
+      const extracted = extractErrorMessage(json)
+      return {
+        message: extracted ?? text,
+        raw: json,
+      }
+    } catch {
+      return { message: text, raw: text }
+    }
+  })
+}
+
+export function getErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.message
+  if (err instanceof Error) {
+    try {
+      const parsed = JSON.parse(err.message)
+      const extracted = extractErrorMessage(parsed)
+      if (extracted) return extracted
+    } catch {}
+    return err.message
+  }
+  return 'An unexpected error occurred'
 }
 
 export interface PaginatedResponse<T> {
@@ -141,11 +197,18 @@ export interface StaffMember {
   university: string
 }
 
+async function throwOnError(res: Response): Promise<void> {
+  if (!res.ok) {
+    const body = await parseErrorBody(res)
+    throw new ApiError(res.status, body.message, body.raw)
+  }
+}
+
 export async function fetchAdminUniversities(token: string): Promise<AdminUniversity[]> {
   const res = await fetch(`${API_URL}admin/universities/`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await res.text())
+  await throwOnError(res)
   const data = await res.json()
   return data.results ?? data
 }
@@ -159,7 +222,7 @@ export async function createUniversity(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error(await res.text())
+  await throwOnError(res)
   return res.json()
 }
 
@@ -167,7 +230,7 @@ export async function fetchStaff(token: string, universityId: string): Promise<S
   const res = await fetch(`${API_URL}universities/${universityId}/staff/`, {
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await res.text())
+  await throwOnError(res)
   return res.json()
 }
 
@@ -181,7 +244,7 @@ export async function inviteStaff(
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(data),
   })
-  if (!res.ok) throw new Error(await res.text())
+  await throwOnError(res)
   return res.json()
 }
 
@@ -194,7 +257,7 @@ export async function removeStaff(
     method: 'DELETE',
     headers: { Authorization: `Bearer ${token}` },
   })
-  if (!res.ok) throw new Error(await res.text())
+  await throwOnError(res)
 }
 
 export async function login(
@@ -206,6 +269,6 @@ export async function login(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
   })
-  if (!res.ok) throw new Error(await res.text())
+  await throwOnError(res)
   return res.json()
 }

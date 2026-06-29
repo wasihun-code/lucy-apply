@@ -19,6 +19,8 @@ describe('StatusBadge', () => {
     { status: 'scheduled', expectedLabel: 'Scheduled' },
     { status: 'open', expectedLabel: 'Open' },
     { status: 'closed', expectedLabel: 'Closed' },
+    { status: 'admin', expectedLabel: 'Admin' },
+    { status: 'officer', expectedLabel: 'Officer' },
   ]
 
   statuses.forEach(({ status, expectedLabel }) => {
