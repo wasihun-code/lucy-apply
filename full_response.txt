@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <title>Page not found at /api/v1/admin/users/1/status/</title>
+  <meta name="robots" content="NONE,NOARCHIVE">
+  <style>
+    html * { padding:0; margin:0; }
+    body * { padding:10px 20px; }
+    body * * { padding:0; }
+    body { font-family: sans-serif; background:#eee; color:#000; }
+    body > :where(header, main, footer) { border-bottom:1px solid #ddd; }
+    h1 { font-weight:normal; margin-bottom:.4em; }
+    h1 small { font-size:60%; color:#666; font-weight:normal; }
+    table { border:none; border-collapse: collapse; width:100%; }
+    td, th { vertical-align:top; padding:2px 3px; }
+    th { width:12em; text-align:right; color:#666; padding-right:.5em; }
+    #info { background:#f6f6f6; }
+    #info ol { margin: 0.5em 4em; }
+    #info ol li { font-family: monospace; }
+    #summary { background: #ffc; }
+    #explanation { background:#eee; border-bottom: 0px none; }
+    pre.exception_value { font-family: sans-serif; color: #575757; font-size: 1.5em; margin: 10px 0 10px 0; }
+  </style>
+</head>
+<body>
+  <header id="summary">
+    <h1>Page not found <small>(404)</small></h1>
+    
+    <table class="meta">
+      <tr>
+        <th scope="row">Request Method:</th>
+        <td>PATCH</td>
+      </tr>
+      <tr>
+        <th scope="row">Request URL:</th>
+        <td>http://localhost:8003/api/v1/admin/users/1/status/</td>
+      </tr>
+      
+    </table>
+  </header>
+
+  <main id="info">
+    
+      <p>
+      Using the URLconf defined in <code>lucy_apply.urls</code>,
+      Django tried these URL patterns, in this order:
+      </p>
+      <ol>
+        
+          <li>
+            
+              <code>
+                admin/
+                
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/auth/
+                
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/$
+                [name='university-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='university-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/$
+                [name='university-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='university-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/applications/$
+                [name='university-applications']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/applications\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='university-applications']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/audit-log/$
+                [name='university-audit-log']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/audit-log\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='university-audit-log']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/programs/$
+                [name='university-programs']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/programs\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='university-programs']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/staff/$
+                [name='university-staff']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/staff\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='university-staff']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/staff/(?P&lt;staff_id&gt;[^/.]+)/$
+                [name='university-staff-remove']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/staff/(?P&lt;staff_id&gt;[^/.]+)\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='university-staff-remove']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/status/$
+                [name='university-status']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^universities/(?P&lt;pk&gt;[^/.]+)/status\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='university-status']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^programs/$
+                [name='program-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^programs\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='program-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^programs/(?P&lt;pk&gt;[^/.]+)/$
+                [name='program-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^programs/(?P&lt;pk&gt;[^/.]+)\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='program-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^programs/(?P&lt;pk&gt;[^/.]+)/cycles/$
+                [name='program-cycles']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^programs/(?P&lt;pk&gt;[^/.]+)/cycles\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='program-cycles']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^programs/(?P&lt;pk&gt;[^/.]+)/status/$
+                [name='program-status']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^programs/(?P&lt;pk&gt;[^/.]+)/status\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='program-status']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^admission-cycles/$
+                [name='admission-cycle-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^admission-cycles\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='admission-cycle-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^admission-cycles/(?P&lt;pk&gt;[^/.]+)/$
+                [name='admission-cycle-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^admission-cycles/(?P&lt;pk&gt;[^/.]+)\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='admission-cycle-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^admission-cycles/(?P&lt;pk&gt;[^/.]+)/archive/$
+                [name='admission-cycle-archive']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^admission-cycles/(?P&lt;pk&gt;[^/.]+)/archive\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='admission-cycle-archive']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^admission-cycles/(?P&lt;pk&gt;[^/.]+)/close/$
+                [name='admission-cycle-close']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^admission-cycles/(?P&lt;pk&gt;[^/.]+)/close\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='admission-cycle-close']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/$
+                [name='application-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/$
+                [name='application-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/documents/$
+                [name='application-documents']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/documents\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-documents']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/documents/upload-url/$
+                [name='application-documents-upload-url']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/documents/upload-url\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-documents-upload-url']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/history/$
+                [name='application-history']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/history\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-history']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/offer-response/$
+                [name='application-offer-response']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/offer-response\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-offer-response']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/payment/$
+                [name='application-payment']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/payment\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-payment']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/payment-intent/$
+                [name='application-payment-intent']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/payment-intent\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-payment-intent']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/status/$
+                [name='application-status-change']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/status\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-status-change']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/submit/$
+                [name='application-submit']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applications/(?P&lt;pk&gt;[^/.]+)/submit\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='application-submit']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^documents/$
+                [name='document-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^documents\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='document-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^documents/(?P&lt;pk&gt;[^/.]+)/$
+                [name='document-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^documents/(?P&lt;pk&gt;[^/.]+)\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='document-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^documents/(?P&lt;pk&gt;[^/.]+)/flag/$
+                [name='document-flag']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^documents/(?P&lt;pk&gt;[^/.]+)/flag\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='document-flag']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^documents/(?P&lt;pk&gt;[^/.]+)/verify/$
+                [name='document-verify']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^documents/(?P&lt;pk&gt;[^/.]+)/verify\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='document-verify']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applicants/me/$
+                [name='applicant-me']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                ^applicants/me\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='applicant-me']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                
+                [name='api-root']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/
+                
+              </code>
+            
+              <code>
+                &lt;drf_format_suffix:format&gt;
+                [name='api-root']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/stats/
+                [name='admin-stats']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/users/
+                [name='admin-users']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/users/&lt;uuid:pk&gt;/status/
+                [name='admin-user-status']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/universities/
+                [name='admin-universities']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/
+                
+              </code>
+            
+              <code>
+                ^audit-log/$
+                [name='admin-audit-log-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/
+                
+              </code>
+            
+              <code>
+                ^audit-log\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='admin-audit-log-list']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/
+                
+              </code>
+            
+              <code>
+                ^audit-log/(?P&lt;pk&gt;[^/.]+)/$
+                [name='admin-audit-log-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/
+                
+              </code>
+            
+              <code>
+                ^audit-log/(?P&lt;pk&gt;[^/.]+)\.(?P&lt;format&gt;[a-z0-9]+)/?$
+                [name='admin-audit-log-detail']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/
+                
+              </code>
+            
+              <code>
+                
+                [name='api-root']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/admin/
+                
+              </code>
+            
+              <code>
+                &lt;drf_format_suffix:format&gt;
+                [name='api-root']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                api/v1/payments/webhook/
+                [name='payment-webhook']
+              </code>
+            
+          </li>
+        
+          <li>
+            
+              <code>
+                ^media/(?P&lt;path&gt;.*)$
+                
+              </code>
+            
+          </li>
+        
+      </ol>
+      <p>
+        
+          The current path, <code>api/v1/admin/users/1/status/</code>,
+        
+        didn’t match any of these.
+      </p>
+    
+  </main>
+
+  <footer id="explanation">
+    <p>
+      You’re seeing this error because you have <code>DEBUG = True</code> in
+      your Django settings file. Change that to <code>False</code>, and Django
+      will display a standard 404 page.
+    </p>
+  </footer>
+</body>
+</html>

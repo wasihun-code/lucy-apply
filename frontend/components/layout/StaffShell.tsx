@@ -25,6 +25,7 @@ const staffNav: NavItem[] = [
   { href: '/portal/applications', label: 'Applications', roles: ['officer', 'admin'] },
   { href: '/portal/programs', label: 'Programs', roles: ['officer', 'admin'] },
   { href: '/portal/team', label: 'Team', roles: ['admin'] },
+  { href: '/portal/audit-log', label: 'Audit Log', roles: ['admin'] },
 ]
 
 function getNavItems(role: string, permissionLevel?: string): NavItem[] {

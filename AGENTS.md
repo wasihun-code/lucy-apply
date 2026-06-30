@@ -68,6 +68,31 @@ CI runs `python manage.py check` then `pytest --tb=short` (requires PostgreSQL +
 
 ---
 
+## Per-sprint verification policy
+
+Every sprint must:
+1. Add frontend tests for new component/page logic (Vitest, `frontend/__tests__/`)
+2. Add a QA script for any new user-facing flow (`qa/feNN/...sh`)
+3. Provide a Conventional Commit message after verification passes, as the final step of every sprint report
+
+Default verification commands (use these, not the full suite):
+
+```bash
+cd frontend && npx tsc --noEmit                          # always, full
+cd frontend && npx next build                            # always, full
+cd frontend && npx vitest run __tests__/X.test.tsx       # new file only
+bash qa/run_test.sh qa/feNN/01_flow.sh                   # new script only
+```
+
+Never run the following as routine per-sprint verification — they rebuild Docker images and run the entire suite, which is slow and mostly redundant for an isolated sprint:
+- `bash qa/run_all.sh` (no argument)
+- `npx vitest run` (no path)
+- `./dev-test.sh`
+
+Reserve full-suite runs for milestone checkpoints (end of a Tier) or when cross-cutting breakage is suspected, and only run them when explicitly requested.
+
+---
+
 ## Loaded automatically via `opencode.json`
 
 - `context/FE_DESIGN_SYSTEM.md` — color tokens, typography, spacing, component specs
