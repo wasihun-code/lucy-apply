@@ -23,9 +23,17 @@ export default function LoginPage() {
     setCheckedAuth(true)
     getMe().then((me) => {
       if (!me) return
-      if (me.role === 'universitystaff') router.replace('/portal/applications')
-      else if (me.role === 'platformadmin') router.replace('/admin/universities')
-      else router.replace('/dashboard')
+      if (me.role === 'universitystaff') {
+        if (!me.mfa_enabled) { router.replace('/mfa/setup'); return }
+        if (!me.mfa_verified) { router.replace('/mfa/verify?redirect=/portal/applications'); return }
+        router.replace('/portal/applications')
+      } else if (me.role === 'platformadmin') {
+        if (!me.mfa_enabled) { router.replace('/mfa/setup'); return }
+        if (!me.mfa_verified) { router.replace('/mfa/verify?redirect=/admin/universities'); return }
+        router.replace('/admin/universities')
+      } else {
+        router.replace('/dashboard')
+      }
     })
   }, [router, checkedAuth])
 
@@ -47,30 +55,29 @@ export default function LoginPage() {
         throw new Error(data.error?.message || data.detail || 'Login failed')
       }
 
-      const loginData = await res.json()
-
-      const meRes = await fetch('/api/auth/me/', {
-        headers: { Authorization: `Bearer ${loginData.access}` },
-      })
-
-      if (!meRes.ok) {
-        const meErr = await meRes.json().catch(() => null)
-        const msg = meErr?.error?.message || meErr?.detail || `Backend returned ${meRes.status}`
-        throw new Error(msg)
+      const me = await getMe()
+      if (!me) {
+        throw new Error('Failed to load user profile')
       }
 
-      const me = await meRes.json()
-
       if (me.role === 'universitystaff') {
-        if (me.mfa_enabled && !me.mfa_verified) {
-          router.push('/mfa/verify?redirect=/portal')
+        if (!me.mfa_enabled) {
+          router.push('/mfa/setup')
+          return
+        }
+        if (!me.mfa_verified) {
+          router.push('/mfa/verify?redirect=/portal/applications')
           return
         }
         router.push('/portal/applications')
         return
       }
       if (me.role === 'platformadmin') {
-        if (me.mfa_enabled && !me.mfa_verified) {
+        if (!me.mfa_enabled) {
+          router.push('/mfa/setup')
+          return
+        }
+        if (!me.mfa_verified) {
           router.push('/mfa/verify?redirect=/admin/universities')
           return
         }
