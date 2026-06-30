@@ -6,75 +6,65 @@ Monorepo: Django 6.0 backend (Python 3.12, DRF, Celery, PostgreSQL/Redis) + Next
 
 ---
 
-## Verification (run after every change)
+## Verification (run from `frontend/`)
 
 ```bash
-# Backend — requires PostgreSQL + Redis running (docker compose up -d db redis)
-pytest --tb=short                       # 254 tests, all must pass
-
-# Frontend
-cd frontend && npx tsc --noEmit         # zero TS errors
-cd frontend && next build               # must succeed (standalone output)
+npx tsc --noEmit                  # zero TS errors
+npx vitest run                    # 175 frontend tests (21 files, all pass)
+next build                        # standalone output, must succeed
+bash qa/run_all.sh                # frontend at root, backend tests at root
 ```
 
-CI runs `python manage.py check` then `pytest --tb=short`.
+CI runs `python manage.py check` then `pytest --tb=short` (requires PostgreSQL + Redis).
 
 ---
 
 ## Architecture must-knows
 
 - **Auth:** httpOnly JWT cookies via Next.js proxy `/api/auth/login/`. Never read/write tokens to `localStorage` or `sessionStorage`.
-- **API layer:** `fetchAPI` in `frontend/lib/api.ts` is the typed wrapper. Some legacy functions in that same file (`login`, `fetchAdminUniversities`, `createUniversity`, etc.) use raw `fetch()` with Bearer token — migrate to `fetchAPI` when touching. `fetchAPI` lacks `credentials: 'include'` (TODO FE-04) — cookie-based auth will break without it.
-- **Three layout shells:** `PublicShell` (`app/(public)/layout.tsx`), `ApplicantShell` (`app/dashboard/layout.tsx`), `StaffShell` (`app/portal/**`, `app/admin/**`). Every page slots into exactly one via route group layout.
-- **Wizard:** Section-based (`/dashboard/apply/[programId]?section=...`), freely navigable sections. Not a linear step flow.
-- **Auto-save:** Debounced 2000ms via `lodash.debounce` or `useMemo` pattern, save state indicator in wizard top bar.
+- **API layer:** `fetchAPI` in `lib/api.ts` is the typed wrapper. 6 legacy functions (`login`, `fetchAdminUniversities`, `createUniversity`, `fetchStaff`, `inviteStaff`, `removeStaff`) still use raw `fetch()` with Bearer token — migrate to `fetchAPI` when touching. `fetchAPI` lacks `credentials: 'include'` (TODO FE-04) — cookie-based auth will break without it.
+- **Three layout shells:** `PublicShell` (`app/(public)/layout.tsx`), `ApplicantShell` (`app/dashboard/layout.tsx`), `StaffShell` (`app/portal/**`, `app/admin/**`). Landing page at `app/(public)/page.tsx`, NOT `app/page.tsx`.
+- **Wizard:** Section-based (`/dashboard/apply/[programId]?section=...`), freely navigable. Auto-save debounced 2000ms via `lodash.debounce`.
 - **Design tokens:** CSS custom properties in `globals.css` → `tailwind.config.ts`. Colors from tokens only, never hex literals. `--color-accent` (#C8963A gold) is for admitted/accepted/milestone only — never buttons or nav.
 - **Icons:** `lucide-react` only.
 - **`next.config.js`** sets `output: 'standalone'` (Cloud Run). Images allowed from `storage.googleapis.com`.
 
 ---
 
+## Error handling (FE-10)
+
+- `fetchAPI` and all legacy functions now throw `ApiError` (status, message, body) on non-2xx.
+- `getErrorMessage(e)` in every catch block — never `JSON.stringify(e)` or raw error text in the DOM.
+- `extractErrorMessage(json)` parses DRF-style responses: `detail` → `message` → `error.message` → `error.code`.
+- `<Alert variant="danger">` for user-facing errors. `<ErrorState>` component for inline errors with retry.
+
+---
+
+## Component constraints (not obvious from props)
+
+- **`Button`**: no `href` prop. Use `<Link href=""><Button>...</Button></Link>` for navigation buttons.
+- **`Alert`**: no `onClose`/dismiss prop. Success/error messages persist until replaced.
+- **`StatusBadge`**: 18 statuses including `admin` (bg-primary-soft) and `officer` (bg-neutral/10). Any unknown status gets a fallback neutral style.
+- **`EmptyState`**: required on every list that can be empty.
+
+---
+
 ## Repo boundaries
 
-| Path | Owner | Touching rules |
+| Path | Owner | Rules |
 |---|---|---|
 | `frontend/` | Frontend revamp | Edit freely |
-
-| `backend top-level dirs` `(lucy_apply/, identity/, programs/, admissions/, documents/, payments/, notifications/, audit/, universities/, tests/)` | Backend | **Do not modify** |
+| `lucy_apply/`, `identity/`, `programs/`, `admissions/`, `documents/`, `payments/`, `notifications/`, `audit/`, `universities/`, `tests/` | Backend | **Do not modify** |
 | `context/` | Design reference | Read-only |
 | `.opencode/` | OpenCode config | Sprint commands (`/fe01`–`/fe16`), subagents (`@fe-review`, `@visual-check`) |
 
 ---
 
-## Frontend test runner
+## Backend quirks (for QA scripts)
 
-- **Vitest** (not Jest): `cd frontend && npm test` or `cd frontend && npx vitest run`
-- Config: `frontend/vitest.config.ts`, setup: `frontend/vitest.setup.ts`
-- Tests live in `frontend/__tests__/`
-- Docker compose has a `frontend-test` service: `docker compose run --rm frontend-test`
-
----
-
-## Backend testing quirks
-
-- `pytest-django` with `DJANGO_SETTINGS_MODULE=lucy_apply.settings` (see `pytest.ini`)
-- `conftest.py` sets `OPENSE_TESTING=true` env var
-- QA scripts: `bash qa/run_all.sh` — shell-based integration tests
-- `dev-test.sh`: full docker-compose test pipeline (build → up → frontend-tests → pytest → qa)
-
----
-
-## Route group structure
-
-The landing page is at `app/(public)/page.tsx`, NOT `app/page.tsx`. Route groups: `(public)`, `(auth)`, `dashboard/`, `portal/`, `admin/`.
-
----
-
-## Known gaps (being fixed in sprints)
-
-- `fetchAPI` lacks `credentials: 'include'` — cookie auth is broken currently
-- Raw JSON errors surface to users (e.g. `CYCLE_CLOSED`) — must catch and show `<Alert variant="danger">`
-- Some `api.ts` helpers still use raw `fetch()` with Bearer token — migrate to `fetchAPI`
+- `pytest.ini` sets `DJANGO_SETTINGS_MODULE=lucy_apply.settings`. `conftest.py` sets `OPENSE_TESTING=true` env var.
+- DELETE for staff returns HTTP 200 (not 204) and sets `account_status` to `deactivated` (not removed).
+- QA scripts in `qa/` are shell-based integration tests, run via `bash qa/run_all.sh`.
 
 ---
 
