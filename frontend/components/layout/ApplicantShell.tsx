@@ -5,12 +5,13 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { getMe, type AuthUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/Button'
-import { Menu, X, LogOut } from 'lucide-react'
+import { Menu, X, LogOut, FileText, Compass, CreditCard, User } from 'lucide-react'
 
 const navItems = [
-  { href: '/dashboard', label: 'My Applications' },
-  { href: '/universities', label: 'Browse Programs' },
+  { href: '/dashboard', label: 'My Applications', icon: FileText },
+  { href: '/universities', label: 'Browse Programs', icon: Compass },
+  { href: '/dashboard/finances', label: 'Finances', icon: CreditCard },
+  { href: '/dashboard/profile', label: 'Profile', icon: User },
 ]
 
 export function ApplicantShell({ children }: { children: React.ReactNode }) {
@@ -60,12 +61,13 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
             key={item.href}
             href={item.href}
             className={cn(
-              'flex items-center px-3 py-2 rounded text-sm font-medium transition-colors',
+              'flex items-center gap-3 px-3 py-2 rounded text-sm font-medium transition-colors',
               pathname === item.href
                 ? 'bg-primary-soft text-primary'
                 : 'text-text-600 hover:bg-background hover:text-text-900',
             )}
           >
+            <item.icon size={18} />
             {item.label}
           </Link>
         ))}
