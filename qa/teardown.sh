@@ -44,10 +44,12 @@ for pidfile in /tmp/lucy_qa_server.pid; do
     fi
 done
 
-# Remove the QA database and any test artifacts
-if [ -f "$QA_DB" ]; then
-    rm -f "$QA_DB"
-    echo "  QA database removed."
-fi
+# Remove the QA database and any stale SQLite artifacts
+for f in "$QA_DB" "$QA_DB-wal" "$QA_DB-shm"; do
+    if [ -f "$f" ]; then
+        rm -f "$f"
+    fi
+done
+echo "  QA database removed."
 
 echo "  Teardown complete."

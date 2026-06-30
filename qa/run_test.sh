@@ -11,7 +11,7 @@ if [ $# -ne 1 ]; then
   echo "Examples:"
   echo "  bash qa/run_test.sh auth/login.sh"
   echo "  bash qa/run_test.sh public/universities.sh"
-  echo "  bash qa/run_test.sh fe10/program_create.sh"
+  echo "  bash qa/run_test.sh qa/10-fe10/01_team_management_fe10.sh"
   exit 1
 fi
 

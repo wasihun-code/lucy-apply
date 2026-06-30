@@ -140,20 +140,20 @@ print('  Lockout message: %s' % d['error']['message'])
 pass "Lockout correctly triggered"
 
 # =================================================================
-#  7. Re-setup MFA (delete device so later tests aren't blocked)
+#  7. Delete TOTP device so later tests aren't blocked
 # =================================================================
-header "7. Reset MFA device for subsequent tests"
+header "7. Delete MFA device for subsequent tests"
 
-api_call POST "$BASE_URL/auth/mfa/setup/" "" "$STAFF_TOKEN"
-assert_status 200 "$API_STATUS" "mfa reset"
-
-echo "$API_BODY" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-assert 'provisioning_uri' in d, 'Missing provisioning_uri after reset'
-print('  MFA device reset OK')
-"
-pass "MFA device reset"
+cd "$PROJECT_DIR" && venv/bin/python -c "
+import django, os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'lucy_apply.settings_qa')
+django.setup()
+from django.contrib.contenttypes.models import ContentType
+from django_otp.plugins.otp_totp.models import TOTPDevice
+total, _ = TOTPDevice.objects.all().delete()
+print('  Deleted %d TOTP device(s)' % total)
+" 2>&1 | tail -1
+pass "MFA device deleted"
 
 echo ""
 echo "  All FE-14 (MFA setup) tests passed."

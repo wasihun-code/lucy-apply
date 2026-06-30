@@ -68,11 +68,25 @@ CI runs `python manage.py check` then `pytest --tb=short` (requires PostgreSQL +
 
 ---
 
+## QA file naming convention
+
+All QA test scripts follow the pattern `{NN}_{purpose}_{sprint}.sh` within numerical-prefixed directories:
+
+- `NN`: 2-digit ordering number (unique within directory)
+- `purpose`: kebab-case description of what the test covers
+- `sprint`: `fe{NN}` for sprint-owned tests, `core` for foundational auth tests
+
+Example: `qa/05-fe15/01_finances_fe15.sh`, `qa/01-auth/09_mfa_core.sh`.
+
+`qa/run_all.sh` discovers scripts via `find qa -name '*.sh'` sorted alphabetically, so the directory prefix (`01-auth`, `02-public`, ...) determines execution order. Scripts within a directory execute in `01_...`, `02_...` order.
+
+---
+
 ## Per-sprint verification policy
 
 Every sprint must:
 1. Add frontend tests for new component/page logic (Vitest, `frontend/__tests__/`)
-2. Add a QA script for any new user-facing flow (`qa/feNN/...sh`)
+2. Add a QA script for any new user-facing flow (`qa/{prefix}-{area}/{order}_{purpose}_{sprint}.sh`)
 3. Provide a Conventional Commit message after verification passes, as the final step of every sprint report
 
 Default verification commands (use these, not the full suite):
@@ -81,7 +95,7 @@ Default verification commands (use these, not the full suite):
 cd frontend && npx tsc --noEmit                          # always, full
 cd frontend && npx next build                            # always, full
 cd frontend && npx vitest run __tests__/X.test.tsx       # new file only
-bash qa/run_test.sh qa/feNN/01_flow.sh                   # new script only
+bash qa/run_test.sh qa/05-fe15/02_profile_fe15.sh        # new script only
 ```
 
 Never run the following as routine per-sprint verification — they rebuild Docker images and run the entire suite, which is slow and mostly redundant for an isolated sprint:

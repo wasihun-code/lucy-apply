@@ -70,4 +70,4 @@ else
 fi
 
 echo ""
-echo "  ✓ PASS: qa/auth/08_email_security.sh"
+echo "  ✓ PASS: qa/01-auth/11_email_security_core.sh"

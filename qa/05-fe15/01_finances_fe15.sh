@@ -12,11 +12,23 @@ source "$QA_DIR/lib.sh"
 header "FE-15: Finances / Payment History"
 
 # =================================================================
-#  1. Alice's application has no payment yet — 404 expected
+#  0. Create a fresh application for isolated payment testing
+# =================================================================
+header "0. Create fresh application for isolated payment testing"
+
+api_call POST "$BASE_URL/applications/" \
+  "{\"program\": \"$PROGRAM_B_ID\", \"admission_cycle\": \"$CYCLE_B_ID\"}" "$TOKEN"
+assert_status 201 "$API_STATUS" "create fresh app"
+FRESH_APP_ID=$(echo "$API_BODY" | python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+echo "  FRESH_APP_ID=$FRESH_APP_ID"
+pass "Fresh application created"
+
+# =================================================================
+#  1. Fresh application has no payment yet — 404 expected
 # =================================================================
 header "1. GET application payment (no payment yet → 404)"
 
-api_call GET "$BASE_URL/applications/$APP_ID/payment/" "" "$TOKEN"
+api_call GET "$BASE_URL/applications/$FRESH_APP_ID/payment/" "" "$TOKEN"
 assert_status 404 "$API_STATUS" "payment before creation"
 echo "$API_BODY" | python3 -c "
 import sys, json
@@ -27,22 +39,14 @@ print('  -> correct NO_PAYMENT error')
 pass "No payment returns 404"
 
 # =================================================================
-#  2. Submit required documents for the application
+#  2. Submit required documents for the fresh application
 # =================================================================
 header "2. Upload required documents"
 
-DOCS=$(python3 -c "
-import json
-docs = [
-    {'document_type': 'transcript', 'file': 'https://storage.example.com/transcript.pdf'},
-    {'document_type': 'passport', 'file': 'https://storage.example.com/passport.pdf'},
-]
-print(json.dumps(docs))
-")
-
-for doc in $(echo "$DOCS" | python3 -c "import sys,json;docs=json.load(sys.stdin);[print(json.dumps(d)) for d in docs]"); do
-  api_call POST "$BASE_URL/applications/$APP_ID/documents/" "$doc" "$TOKEN"
-  assert_status 201 "$API_STATUS" "document upload"
+for doc_type in transcript cv; do
+  api_call POST "$BASE_URL/applications/$FRESH_APP_ID/documents/" \
+    "{\"document_type\": \"$doc_type\", \"object_key\": \"test/${doc_type}.pdf\"}" "$TOKEN"
+  assert_status 201 "$API_STATUS" "document upload ($doc_type)"
 done
 pass "Documents uploaded"
 
@@ -51,7 +55,7 @@ pass "Documents uploaded"
 # =================================================================
 header "3. Create payment intent"
 
-api_call POST "$BASE_URL/applications/$APP_ID/payment-intent/" "" "$TOKEN"
+api_call POST "$BASE_URL/applications/$FRESH_APP_ID/payment-intent/" "" "$TOKEN"
 assert_status 200 "$API_STATUS" "payment intent"
 echo "$API_BODY" | python3 -c "
 import sys, json
@@ -67,7 +71,7 @@ pass "Payment intent created"
 # =================================================================
 header "4. GET payment after creation"
 
-api_call GET "$BASE_URL/applications/$APP_ID/payment/" "" "$TOKEN"
+api_call GET "$BASE_URL/applications/$FRESH_APP_ID/payment/" "" "$TOKEN"
 assert_status 200 "$API_STATUS" "payment retrieval"
 echo "$API_BODY" | python3 -c "
 import sys, json

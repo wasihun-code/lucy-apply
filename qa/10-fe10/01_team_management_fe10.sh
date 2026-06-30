@@ -42,8 +42,8 @@ header "2. Invite staff (officer)"
 
 INVITE_DATA=$(cat <<JSON
 {
-  "email": "$NEW_STAFF_EMAIL",
-  "full_name": "$NEW_STAFF_FULL_NAME",
+  "email": "fe10_officer@univ.com",
+  "full_name": "FE-10 Officer",
   "permission_level": "officer"
 }
 JSON
@@ -57,8 +57,8 @@ echo "  Created staff ID: $NEW_STAFF_ID"
 echo "$API_BODY" | python3 -c "
 import sys, json
 d = json.load(sys.stdin)
-assert d.get('email') == '$NEW_STAFF_EMAIL', 'Email mismatch'
-assert d.get('full_name') == '$NEW_STAFF_FULL_NAME', 'Name mismatch'
+assert d.get('email') == 'fe10_officer@univ.com', 'Email mismatch'
+assert d.get('full_name') == 'FE-10 Officer', 'Name mismatch'
 assert d.get('permission_level') == 'officer', 'Level mismatch'
 print('  Staff invite validated')
 "

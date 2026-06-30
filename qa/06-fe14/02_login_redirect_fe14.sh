@@ -96,5 +96,20 @@ api_call POST "$BASE_URL/auth/mfa/verify/" '{"code":"000000"}' "$TOKEN"
 assert_status 403 "$API_STATUS" "applicant mfa verify"
 pass "Applicants correctly denied from MFA endpoints"
 
+# =================================================================
+#  6. Delete TOTP device created during testing
+# =================================================================
+header "6. Clean up MFA device"
+
+cd "$PROJECT_DIR" && venv/bin/python -c "
+import django, os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'lucy_apply.settings_qa')
+django.setup()
+from django_otp.plugins.otp_totp.models import TOTPDevice
+total, _ = TOTPDevice.objects.all().delete()
+print('  Cleaned up %d TOTP device(s)' % total)
+" 2>&1 | tail -1
+pass "MFA device cleaned up"
+
 echo ""
 echo "  All FE-14 (login redirect) tests passed."

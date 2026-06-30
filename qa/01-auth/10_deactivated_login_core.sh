@@ -99,4 +99,4 @@ else
 fi
 
 echo ""
-echo "  ✓ PASS: qa/auth/07_deactivated_login.sh"
+echo "  ✓ PASS: qa/01-auth/10_deactivated_login_core.sh"

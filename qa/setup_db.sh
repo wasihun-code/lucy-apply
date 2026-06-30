@@ -20,15 +20,14 @@ QA_DB="$PROJECT_DIR/qa_db.sqlite3"
 
 echo "--- QA Database Setup ---"
 
-# Remove existing QA database for a clean start
-if [ -f "$QA_DB" ]; then
-    echo "  Removing existing QA database..."
-    rm -f "$QA_DB"
-fi
+# Remove existing QA database and any stale SQLite artifacts for a clean start
+for f in "$QA_DB" "$QA_DB-wal" "$QA_DB-shm"; do
+    if [ -f "$f" ]; then
+        rm -f "$f"
+    fi
+done
 
-# Remove any previous test migrations (bytecode caches etc.)
 echo "  Running migrations on fresh QA database..."
 DJANGO_SETTINGS_MODULE=lucy_apply.settings_qa \
-    venv/bin/python manage.py migrate --run-syncdb 2>&1 | tail -5
-
+    venv/bin/python manage.py migrate 2>&1
 echo "  QA database created at $QA_DB"

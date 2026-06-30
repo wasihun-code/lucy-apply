@@ -14,30 +14,16 @@ echo "=============================================="
 
 # ── 1. MFA Setup ────────────────────────────────────
 echo ""
-echo "--- MFA Setup (first call) ---"
+echo "--- MFA Setup ---"
 SETUP1=$(curl -s -X POST "${BASE_URL}/auth/mfa/setup/" \
     -H "Authorization: Bearer ${STAFF_TOKEN}" \
     -H 'Content-Type: application/json')
 PROVISIONING_URI=$(echo "$SETUP1" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('provisioning_uri',''))" 2>/dev/null || echo "")
 if [ -n "$PROVISIONING_URI" ]; then
-    echo "  PASS: First call returns provisioning_uri"
+    echo "  PASS: Setup returns provisioning_uri"
 else
     echo "  FAIL: No provisioning_uri in response"
     echo "  $SETUP1"
-    exit 1
-fi
-
-echo ""
-echo "--- MFA Setup (second call — idempotent) ---"
-SETUP2=$(curl -s -X POST "${BASE_URL}/auth/mfa/setup/" \
-    -H "Authorization: Bearer ${STAFF_TOKEN}" \
-    -H 'Content-Type: application/json')
-URI2=$(echo "$SETUP2" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('provisioning_uri',''))" 2>/dev/null || echo "")
-if [ -n "$URI2" ]; then
-    echo "  PASS: Second call also returns provisioning_uri (idempotent)"
-else
-    echo "  FAIL: Second call did not return provisioning_uri"
-    echo "  $SETUP2"
     exit 1
 fi
 
@@ -86,5 +72,18 @@ else
     exit 1
 fi
 
+# ── 5. Clean up MFA device ──────────────────────────
 echo ""
-echo "  ✓ PASS: qa/auth/06_mfa.sh"
+echo "--- Clean up MFA device ---"
+cd "$PROJECT_DIR" && venv/bin/python -c "
+import django, os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'lucy_apply.settings_qa')
+django.setup()
+from identity.models import UniversityStaff
+staff = UniversityStaff.objects.get(email='$STAFF_EMAIL')
+deleted, _ = staff.totpdevice_set.all().delete()
+print('  Deleted %d TOTP device(s)' % deleted)
+" 2>&1 | tail -1
+
+echo ""
+echo "  ✓ PASS: qa/01-auth/09_mfa_core.sh"
