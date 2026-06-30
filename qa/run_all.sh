@@ -74,7 +74,7 @@ echo "╔═══════════════════════�
 echo "║  STEP 4: Running test scripts                           ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 
-EXCLUDE_PATTERNS="/(env|setup|lib|run_all|setup_db|run_server|teardown)\.sh$"
+EXCLUDE_PATTERNS="/(env|setup|lib|run_.*|setup_db|run_server|teardown)\.sh$"
 TEST_SCRIPTS=()
 while IFS= read -r -d '' script; do
   if [[ ! "$script" =~ $EXCLUDE_PATTERNS ]] && [[ "$script" != */browser/* ]]; then

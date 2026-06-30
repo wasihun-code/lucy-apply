@@ -272,9 +272,15 @@ class ApplicantViewSet(viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated, IsApplicant]
     serializer_class = ApplicantSerializer
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=['get', 'patch'])
     def me(self, request):
-        serializer = self.get_serializer(request.user.applicant)
+        applicant = request.user.applicant
+        if request.method == 'PATCH':
+            serializer = self.get_serializer(applicant, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        serializer = self.get_serializer(applicant)
         return Response(serializer.data)
 
 
