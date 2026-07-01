@@ -2,19 +2,33 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { getMe, type AuthUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
+import { ApplicantShell } from '@/components/layout/ApplicantShell'
 
 export function PublicShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [authReady, setAuthReady] = useState(false)
 
   useEffect(() => {
-    getMe().then(setUser)
-  }, [])
+    getMe().then((u) => {
+      setUser(u)
+      setAuthReady(true)
+      if (u && pathname === '/') {
+        if (u.role === 'platformadmin') router.replace('/admin/universities')
+        else if (u.role === 'universitystaff') router.replace('/portal')
+        else router.replace('/dashboard')
+      }
+    })
+  }, [router, pathname])
 
+  if (authReady && user && pathname !== '/') {
+    return <ApplicantShell>{children}</ApplicantShell>
+  }
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <nav className="bg-surface border-b border-border sticky top-0 z-50">
