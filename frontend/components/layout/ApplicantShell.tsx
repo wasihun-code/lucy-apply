@@ -17,14 +17,15 @@ const navItems = [
   { href: '/dashboard/profile', label: 'Profile', icon: User },
 ]
 
-export function ApplicantShell({ children }: { children: React.ReactNode }) {
+export function ApplicantShell({ children, initialUser }: { children: React.ReactNode; initialUser?: AuthUser | null }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(initialUser ?? null)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
+    if (initialUser) return
     getMe().then((u) => {
       if (!u) {
         router.push('/login')
@@ -32,7 +33,7 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
       }
       setUser(u)
     })
-  }, [router])
+  }, [router, initialUser])
 
   useEffect(() => {
     async function fetchUnreadCount() {

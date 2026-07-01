@@ -6,7 +6,7 @@ async function proxy(request: NextRequest, { params }: { params: { path: string[
   const token = request.cookies.get('access_token')?.value
   const path = params.path.join('/')
 
-  const url = new URL(`${API_URL.replace(/\/$/, '')}/${path}`)
+  const url = new URL(`${API_URL.replace(/\/$/, '')}/${path}/`)
   request.nextUrl.searchParams.forEach((value, key) => url.searchParams.set(key, value))
 
   const headers: Record<string, string> = {}

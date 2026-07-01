@@ -41,6 +41,12 @@ class Command(BaseCommand):
         self.universities = self._create_universities()
         self.stdout.write('Creating programs and cycles...')
         self.programs, self.cycles = self._create_programs_cycles()
+        self.stdout.write(self.style.SUCCESS('Programs created:'))
+        for name, prog in self.programs.items():
+            self.stdout.write(f'  {prog.id}  {name}  ({prog.university.name})')
+        self.stdout.write(self.style.SUCCESS('Cycles created:'))
+        for key, cycle in self.cycles.items():
+            self.stdout.write(f'  {cycle.id}  {key}')
         self.stdout.write('Creating users...')
         self.users = self._create_users()
         if not options['quick']:

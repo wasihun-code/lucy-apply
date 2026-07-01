@@ -7,12 +7,16 @@ import { getMe, type AuthUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { ApplicantShell } from '@/components/layout/ApplicantShell'
+import { StaffShell } from '@/components/layout/StaffShell'
+
+const AUTH_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/mfa/setup', '/mfa/verify']
 
 export function PublicShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [authReady, setAuthReady] = useState(false)
+  const isAuthPage = AUTH_PATHS.some(p => pathname.startsWith(p))
 
   useEffect(() => {
     getMe().then((u) => {
@@ -26,8 +30,11 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
     })
   }, [router, pathname])
 
-  if (authReady && user && pathname !== '/') {
-    return <ApplicantShell>{children}</ApplicantShell>
+  if (authReady && user && pathname !== '/' && !isAuthPage) {
+    if (user.role === 'applicant') {
+      return <ApplicantShell initialUser={user}>{children}</ApplicantShell>
+    }
+    return <StaffShell initialUser={user}>{children}</StaffShell>
   }
   return (
     <div className="min-h-screen flex flex-col bg-background">

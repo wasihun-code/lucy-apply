@@ -37,14 +37,22 @@ function getNavItems(role: string, permissionLevel?: string): NavItem[] {
   )
 }
 
-export function StaffShell({ children }: { children: React.ReactNode }) {
+export function StaffShell({ children, initialUser }: { children: React.ReactNode; initialUser?: AuthUser | null }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<AuthUser | null>(null)
+  const [user, setUser] = useState<AuthUser | null>(initialUser ?? null)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
+    if (initialUser) {
+      // MFA check still runs even when user is provided
+      if (initialUser.mfa_enabled && !initialUser.mfa_verified) {
+        const redirect = encodeURIComponent(pathname)
+        router.push(`/mfa/verify?redirect=${redirect}`)
+      }
+      return
+    }
     getMe().then((u) => {
       if (!u) {
         router.push('/login')
@@ -54,7 +62,6 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
         router.push('/dashboard')
         return
       }
-      // Preserve MFA redirect logic from original portal layout
       if (u.mfa_enabled && !u.mfa_verified) {
         const redirect = encodeURIComponent(pathname)
         router.push(`/mfa/verify?redirect=${redirect}`)
@@ -62,7 +69,7 @@ export function StaffShell({ children }: { children: React.ReactNode }) {
       }
       setUser(u)
     })
-  }, [router, pathname])
+  }, [router, pathname, initialUser])
 
   useEffect(() => {
     setMobileOpen(false)

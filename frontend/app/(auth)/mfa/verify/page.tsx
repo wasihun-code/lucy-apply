@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getMe } from '@/lib/auth'
+import { getMe, type AuthUser } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/api'
 import { AuthCard } from '@/components/layout/AuthCard'
 import { Input } from '@/components/ui/Input'
@@ -18,15 +18,22 @@ async function apiPost(path: string, body: unknown): Promise<Response> {
   })
 }
 
+function computeDefaultRedirect(me: AuthUser): string {
+  if (me.role === 'platformadmin') return '/admin/universities'
+  if (me.role === 'universitystaff') return '/portal/applications'
+  return '/dashboard'
+}
+
 function MFAVerifyForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const redirectTo = searchParams.get('redirect') || '/dashboard'
+  const redirectFromUrl = searchParams.get('redirect')
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null)
   const [lockedOut, setLockedOut] = useState(false)
+  const [redirectTo, setRedirectTo] = useState('/dashboard')
 
   useEffect(() => {
     getMe().then((me) => {
@@ -34,6 +41,8 @@ function MFAVerifyForm() {
         router.replace('/login')
         return
       }
+      const target = redirectFromUrl || computeDefaultRedirect(me)
+      setRedirectTo(target)
       if (me.role === 'applicant') {
         router.replace('/dashboard')
         return
@@ -43,10 +52,10 @@ function MFAVerifyForm() {
         return
       }
       if (me.mfa_verified) {
-        router.replace(redirectTo)
+        router.replace(target)
       }
     })
-  }, [router, redirectTo])
+  }, [router, redirectFromUrl])
 
   async function handleVerify(e: FormEvent) {
     e.preventDefault()

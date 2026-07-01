@@ -2,7 +2,7 @@
 
 import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { getMe } from '@/lib/auth'
+import { getMe, type AuthUser } from '@/lib/auth'
 import { getErrorMessage } from '@/lib/api'
 import { AuthCard } from '@/components/layout/AuthCard'
 import { Input } from '@/components/ui/Input'
@@ -38,6 +38,11 @@ export default function MFASetupPage() {
   const [verifying, setVerifying] = useState(false)
   const [remainingAttempts, setRemainingAttempts] = useState<number | null>(null)
   const [lockedOut, setLockedOut] = useState(false)
+  const [user, setUser] = useState<AuthUser | null>(null)
+
+  function mfaRedirect(me: AuthUser) {
+    return me.role === 'platformadmin' ? '/admin/universities' : '/portal/applications'
+  }
 
   useEffect(() => {
     getMe().then((me) => {
@@ -45,12 +50,13 @@ export default function MFASetupPage() {
         router.replace('/login')
         return
       }
+      setUser(me)
       if (me.role === 'applicant') {
         router.replace('/dashboard')
         return
       }
       if (me.mfa_enabled && me.mfa_verified) {
-        router.replace(me.role === 'platformadmin' ? '/admin/universities' : '/portal/applications')
+        router.replace(mfaRedirect(me))
         return
       }
       apiPost('auth/mfa/setup/', {}).then(async (res) => {
@@ -76,7 +82,7 @@ export default function MFASetupPage() {
     try {
       const res = await apiPost('auth/mfa/verify/', { code })
       if (res.ok) {
-        router.replace('/portal/applications')
+        router.replace(user ? mfaRedirect(user) : '/portal/applications')
         return
       }
       const body = await res.json().catch(() => null)
