@@ -1,4 +1,5 @@
-import { cn } from '@/lib/utils'
+import Link from 'next/link'
+import { Button } from '@/components/ui/Button'
 
 type EmptyStateProps = {
   icon?: React.ReactNode
@@ -26,19 +27,11 @@ export function EmptyState({ icon, heading, description, action }: EmptyStatePro
       {action && (
         <div className="mt-2">
           {action.href ? (
-            <a
-              href={action.href}
-              className="inline-flex items-center h-10 px-4 text-sm font-medium rounded bg-primary text-white hover:bg-primary-dark transition-colors"
-            >
-              {action.label}
-            </a>
+            <Link href={action.href}>
+              <Button>{action.label}</Button>
+            </Link>
           ) : (
-            <button
-              onClick={action.onClick}
-              className="inline-flex items-center h-10 px-4 text-sm font-medium rounded bg-primary text-white hover:bg-primary-dark transition-colors"
-            >
-              {action.label}
-            </button>
+            <Button onClick={action.onClick}>{action.label}</Button>
           )}
         </div>
       )}

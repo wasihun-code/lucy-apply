@@ -5,10 +5,13 @@ import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { getMe, type AuthUser } from '@/lib/auth'
 import { cn } from '@/lib/utils'
-import { Menu, X, LogOut, FileText, Compass, CreditCard, User } from 'lucide-react'
+import { Menu, LogOut, FileText, Compass, CreditCard, User, Bell } from 'lucide-react'
+
+const NOTIFICATIONS_KEY = 'lucy_notifications_visited'
 
 const navItems = [
   { href: '/dashboard', label: 'My Applications', icon: FileText },
+  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
   { href: '/universities', label: 'Browse Programs', icon: Compass },
   { href: '/dashboard/finances', label: 'Finances', icon: CreditCard },
   { href: '/dashboard/profile', label: 'Profile', icon: User },
@@ -19,6 +22,7 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
     getMe().then((u) => {
@@ -29,6 +33,28 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
       setUser(u)
     })
   }, [router])
+
+  useEffect(() => {
+    async function fetchUnreadCount() {
+      try {
+        const res = await fetch('/api/proxy/applications/')
+        if (!res.ok) return
+        const data = await res.json()
+        const apps = data.results || []
+        const lastVisited = localStorage.getItem(NOTIFICATIONS_KEY)
+        const cutoff = lastVisited ? parseInt(lastVisited, 10) : 0
+        const count = apps.filter((a: { status: string; created_at: string }) => {
+          if (a.status === 'draft') return false
+          if (!cutoff) return true
+          return new Date(a.created_at).getTime() > cutoff
+        }).length
+        setUnreadCount(count)
+      } catch {
+        // silent — badge is best-effort
+      }
+    }
+    fetchUnreadCount()
+  }, [pathname])
 
   useEffect(() => {
     setMobileOpen(false)
@@ -113,20 +139,49 @@ export function ApplicantShell({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Top bar (mobile only) */}
-      <div className="lg:hidden fixed top-0 inset-x-0 z-30 bg-surface border-b border-border h-14 flex items-center px-4">
-        <button
-          onClick={() => setMobileOpen(true)}
-          className="p-2 -ml-2 text-text-600 hover:text-text-900"
-          aria-label="Open menu"
+      <div className="lg:hidden fixed top-0 inset-x-0 z-30 bg-surface border-b border-border h-14 flex items-center justify-between px-4">
+        <div className="flex items-center">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="p-2 -ml-2 text-text-600 hover:text-text-900"
+            aria-label="Open menu"
+          >
+            <Menu size={20} />
+          </button>
+          <span className="ml-3 font-display font-bold text-text-900">Lucy Apply</span>
+        </div>
+        <Link
+          href="/dashboard/notifications"
+          className="relative p-2 text-text-600 hover:text-text-900 transition-colors"
+          aria-label="Notifications"
         >
-          <Menu size={20} />
-        </button>
-        <span className="ml-3 font-display font-bold text-text-900">Lucy Apply</span>
+          <Bell size={20} />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 bg-danger text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-medium leading-none">
+              {unreadCount > 9 ? '9+' : unreadCount}
+            </span>
+          )}
+        </Link>
       </div>
 
       {/* Content area */}
-      <div className="flex-1 lg:ml-60 pt-14 lg:pt-0">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="flex-1 lg:ml-60 pt-14 lg:pt-0 flex flex-col">
+        {/* Desktop top bar */}
+        <div className="hidden lg:flex items-center justify-end h-14 px-6 border-b border-border bg-surface shrink-0">
+          <Link
+            href="/dashboard/notifications"
+            className="relative p-2 text-text-600 hover:text-text-900 transition-colors"
+            aria-label="Notifications"
+          >
+            <Bell size={20} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 bg-danger text-white text-xs rounded-full h-4 w-4 flex items-center justify-center font-medium leading-none">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </Link>
+        </div>
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1">
           {children}
         </div>
       </div>

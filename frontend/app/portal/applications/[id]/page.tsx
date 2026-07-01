@@ -12,6 +12,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Modal } from '@/components/ui/Modal'
 import { Textarea } from '@/components/ui/Textarea'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusTimeline } from '@/components/shared/StatusTimeline'
 import {
   statusLabel,
   historyDotColor,
@@ -470,6 +471,7 @@ export default function ApplicationDetailPage() {
                             onChange={(e) => setFlagReason(e.target.value)}
                             placeholder="Describe the issue with this document..."
                             rows={3}
+                            aria-label="Reason for flagging this document"
                           />
                           {flagError && (
                             <Alert variant="danger">{flagError}</Alert>
@@ -507,45 +509,7 @@ export default function ApplicationDetailPage() {
 
           {/* Status Timeline */}
           <Card>
-            <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
-              Application Timeline
-            </h2>
-            {history.length === 0 ? (
-              <p className="text-sm text-text-600">
-                No status changes recorded.
-              </p>
-            ) : (
-              <div className="space-y-0">
-                {[...history].reverse().map((item, idx, arr) => (
-                  <div key={idx} className="flex gap-3 pb-4 relative">
-                    {idx < arr.length - 1 && (
-                      <div className="absolute left-[5px] top-3 bottom-0 w-px bg-border" />
-                    )}
-                    <div
-                      className={cn(
-                        'w-3 h-3 rounded-full mt-1 shrink-0 z-10',
-                        historyDotColor(item.to_status),
-                      )}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-text-900">
-                        {item.from_status
-                          ? `${statusLabel(item.from_status)} → ${statusLabel(item.to_status)}`
-                          : statusLabel(item.to_status)}
-                      </p>
-                      {item.reason && (
-                        <p className="text-xs text-text-600 mt-0.5">
-                          {item.reason}
-                        </p>
-                      )}
-                      <p className="text-xs text-text-400 mt-0.5">
-                        {formatDate(item.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <StatusTimeline entries={history} />
           </Card>
         </div>
 
@@ -714,6 +678,7 @@ export default function ApplicationDetailPage() {
           placeholder="Reason for reversal..."
           rows={3}
           className="mt-3"
+          aria-label="Reason for reversing this decision"
         />
         {reverseError && (
           <Alert variant="danger" className="mt-3">

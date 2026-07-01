@@ -10,6 +10,7 @@ import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { Alert } from '@/components/ui/Alert'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { ClipboardList, ChevronDown, ChevronRight } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 
@@ -145,7 +146,35 @@ export default function PortalAuditLogPage() {
     return `${label} (#${entry.actor_id})`
   }
 
-  if (loading) return null
+  if (loading) {
+    return (
+      <div>
+        <PageHeader title="Audit Log" />
+        <div className="bg-surface rounded-lg border border-border shadow-sm overflow-hidden mt-6">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-background border-b border-border">
+                <th className="w-10 px-4 py-3" />
+                <th className="px-4 py-3 text-xs uppercase tracking-wide text-text-400 font-medium text-left">Action</th>
+                <th className="px-4 py-3 text-xs uppercase tracking-wide text-text-400 font-medium text-left">Actor</th>
+                <th className="px-4 py-3 text-xs uppercase tracking-wide text-text-400 font-medium text-left">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} className="border-b border-border">
+                  <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
+                  <td className="px-4 py-3"><Skeleton className="h-4 w-32" /></td>
+                  <td className="px-4 py-3"><Skeleton className="h-4 w-28" /></td>
+                  <td className="px-4 py-3"><Skeleton className="h-4 w-20" /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -211,13 +240,13 @@ export default function PortalAuditLogPage() {
                 {entries.map((entry) => (
                   <tr key={entry.id} className="border-b border-border last:border-0">
                     <td className="px-4 py-3">
-                      <button
+                      <Button
+                        variant="ghost"
+                        size="sm"
                         onClick={() => toggleExpand(entry.id)}
-                        className="p-1 text-text-400 hover:text-text-600 transition-colors"
                         aria-label={expandedId === entry.id ? 'Collapse details' : 'Expand details'}
-                      >
-                        {expandedId === entry.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                      </button>
+                        icon={expandedId === entry.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      />
                     </td>
                     <td className="px-4 py-3 text-sm text-text-900">
                       {formatAction(entry.action)}

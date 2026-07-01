@@ -38,9 +38,8 @@ describe('EmptyState', () => {
         action={{ label: 'Go Somewhere', href: '/somewhere' }}
       />,
     )
-    const link = screen.getByText('Go Somewhere')
+    const link = screen.getByRole('link', { name: /Go Somewhere/i })
     expect(link).toBeInTheDocument()
-    expect(link.tagName).toBe('A')
     expect(link).toHaveAttribute('href', '/somewhere')
   })
 })

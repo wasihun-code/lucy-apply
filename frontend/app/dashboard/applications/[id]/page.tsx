@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { getMe } from '@/lib/auth'
-import { formatDate } from '@/lib/utils'
+import { cn, formatDate } from '@/lib/utils'
 import { getErrorMessage } from '@/lib/api'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -11,6 +11,7 @@ import { Alert } from '@/components/ui/Alert'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Modal } from '@/components/ui/Modal'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusTimeline } from '@/components/shared/StatusTimeline'
 import { Skeleton } from '@/components/ui/Skeleton'
 import {
   FileText,
@@ -408,49 +409,7 @@ export default function ApplicationDetailPage() {
 
       {/* Status Timeline */}
       <Card padding="md">
-        <h2 className="text-xl font-display font-semibold text-text-900 mb-4">
-          Application Timeline
-        </h2>
-        {history.length === 0 ? (
-          <p className="text-sm text-text-600">No status changes recorded.</p>
-        ) : (
-          <div className="space-y-0">
-            {[...history].reverse().map((item, idx, arr) => (
-              <div
-                key={idx}
-                className="flex gap-3 pb-4 relative"
-              >
-                {/* Vertical line */}
-                {idx < arr.length - 1 && (
-                  <div className="absolute left-[5px] top-3 bottom-0 w-px bg-border" />
-                )}
-                {/* Dot */}
-                <div
-                  className={cn(
-                    'w-3 h-3 rounded-full mt-1 shrink-0 z-10',
-                    historyDotColor(item.to_status),
-                  )}
-                />
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text-900">
-                    {item.from_status
-                      ? `${statusLabel(item.from_status)} → ${statusLabel(item.to_status)}`
-                      : statusLabel(item.to_status)}
-                  </p>
-                  {item.reason && (
-                    <p className="text-xs text-text-600 mt-0.5">
-                      {item.reason}
-                    </p>
-                  )}
-                  <p className="text-xs text-text-400 mt-0.5">
-                    {formatDate(item.created_at)}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <StatusTimeline entries={history} />
       </Card>
 
       {/* Offer confirmation modal */}
@@ -492,10 +451,6 @@ export default function ApplicationDetailPage() {
   )
 }
 
-function statusLabel(status: string): string {
-  return status.replace(/_/g, ' ')
-}
-
 function statusDescription(status: string): string {
   switch (status) {
     case 'draft':
@@ -516,27 +471,6 @@ function statusDescription(status: string): string {
       return 'You have declined the offer.'
     default:
       return ''
-  }
-}
-
-function historyDotColor(status: string): string {
-  switch (status) {
-    case 'draft':
-      return 'bg-neutral/30'
-    case 'submitted':
-      return 'bg-primary'
-    case 'under_review':
-      return 'bg-warning'
-    case 'admitted':
-    case 'accepted':
-      return 'bg-success'
-    case 'rejected':
-    case 'declined':
-      return 'bg-danger'
-    case 'waitlisted':
-      return 'bg-neutral'
-    default:
-      return 'bg-neutral/30'
   }
 }
 
@@ -613,10 +547,6 @@ function renderFormData(
       </div>
     )
   })
-}
-
-function cn(...classes: (string | boolean | undefined | null)[]): string {
-  return classes.filter(Boolean).join(' ')
 }
 
 function ApplicationDetailSkeleton() {
