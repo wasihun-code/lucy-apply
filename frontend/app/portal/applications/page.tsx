@@ -10,6 +10,7 @@ import { Table, Column } from '@/components/ui/Table'
 import { Pagination } from '@/components/ui/Pagination'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { Button } from '@/components/ui/Button'
+import { Alert } from '@/components/ui/Alert'
 import { Skeleton, SkeletonRow } from '@/components/ui/Skeleton'
 import { FileText } from 'lucide-react'
 
@@ -45,6 +46,7 @@ export default function ApplicationsPage() {
   const [apps, setApps] = useState<ApplicationItem[]>([])
   const [programs, setPrograms] = useState<ProgramItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [count, setCount] = useState(0)
   const [sortKey, setSortKey] = useState('')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
@@ -71,7 +73,7 @@ export default function ApplicationsPage() {
         .then((r) => r.ok ? r.json() : Promise.reject())
         .then((data: PaginatedResponse<ProgramItem>) => {
           setPrograms(data.results || [])
-        }).catch(() => {})
+        }).catch(() => setError('Failed to load programs'))
     }).catch(() => router.push('/login'))
   }, [router])
 
@@ -91,6 +93,7 @@ export default function ApplicationsPage() {
       }).catch(() => {
         setApps([])
         setCount(0)
+        setError('Failed to load applications')
       }).finally(() => setLoading(false))
   }, [user, statusFilter, programFilter, page])
 
@@ -262,6 +265,12 @@ export default function ApplicationsPage() {
           </Button>
         )}
       </div>
+
+      {error && (
+        <div className="mb-4">
+          <Alert variant="danger">{error}</Alert>
+        </div>
+      )}
 
       {loading ? (
         <div className="overflow-x-auto">

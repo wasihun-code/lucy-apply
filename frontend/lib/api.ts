@@ -129,16 +129,17 @@ export interface Payment {
   completed_at: string | null
 }
 
-export interface PaymentIntentResponse {
-  client_secret: string
-}
-
 export interface HistoryItem {
   from_status: string | null
   to_status: string
   changed_by_type: string
   reason: string
   created_at: string
+}
+
+export interface UploadUrlResponse {
+  upload_url: string | null
+  object_key: string
 }
 
 export interface Application {
@@ -173,10 +174,6 @@ export interface ApplicationDocument {
   updated_at: string
 }
 
-export interface UploadUrlResponse {
-  upload_url: string | null
-  object_key: string
-}
 
 export interface AdminUniversity {
   id: string
@@ -197,78 +194,4 @@ export interface StaffMember {
   university: string
 }
 
-async function throwOnError(res: Response): Promise<void> {
-  if (!res.ok) {
-    const body = await parseErrorBody(res)
-    throw new ApiError(res.status, body.message, body.raw)
-  }
-}
-
-export async function fetchAdminUniversities(token: string): Promise<AdminUniversity[]> {
-  const res = await fetch(`${API_URL}admin/universities/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  await throwOnError(res)
-  const data = await res.json()
-  return data.results ?? data
-}
-
-export async function createUniversity(
-  token: string,
-  data: { name: string; description: string; accreditation_info?: string }
-): Promise<University> {
-  const res = await fetch(`${API_URL}universities/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(data),
-  })
-  await throwOnError(res)
-  return res.json()
-}
-
-export async function fetchStaff(token: string, universityId: string): Promise<StaffMember[]> {
-  const res = await fetch(`${API_URL}universities/${universityId}/staff/`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  await throwOnError(res)
-  return res.json()
-}
-
-export async function inviteStaff(
-  token: string,
-  universityId: string,
-  data: { email: string; full_name: string; permission_level: string }
-): Promise<StaffMember> {
-  const res = await fetch(`${API_URL}universities/${universityId}/staff/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(data),
-  })
-  await throwOnError(res)
-  return res.json()
-}
-
-export async function removeStaff(
-  token: string,
-  universityId: string,
-  staffId: string
-): Promise<void> {
-  const res = await fetch(`${API_URL}universities/${universityId}/staff/${staffId}/`, {
-    method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  await throwOnError(res)
-}
-
-export async function login(
-  email: string,
-  password: string
-): Promise<{ access: string; refresh: string }> {
-  const res = await fetch(`${API_URL}auth/login/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
-  await throwOnError(res)
-  return res.json()
-}
+// Legacy functions (login, fetchAdminUniversities, createUniversity, fetchStaff, inviteStaff, removeStaff) were removed in FE-16 — use fetchAPI instead.
