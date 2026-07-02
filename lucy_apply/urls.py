@@ -19,7 +19,7 @@ urlpatterns = [
     path('api/v1/', include(router.urls)),
     path('api/v1/admin/stats/', AdminStatsView.as_view(), name='admin-stats'),
     path('api/v1/admin/users/', AdminUsersView.as_view(), name='admin-users'),
-    path('api/v1/admin/users/<uuid:pk>/status/', AdminUserStatusView.as_view(), name='admin-user-status'),
+    path('api/v1/admin/users/<int:pk>/status/', AdminUserStatusView.as_view(), name='admin-user-status'),
     path('api/v1/admin/universities/', AdminUniversitiesView.as_view(), name='admin-universities'),
     path('api/v1/admin/', include(admin_router.urls)),
     path('api/v1/payments/webhook/', payment_webhook, name='payment-webhook'),

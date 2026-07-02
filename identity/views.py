@@ -203,7 +203,7 @@ class LogoutView(APIView):
 
 
 class MFASetupView(APIView):
-    permission_classes = [IsAuthenticated, IsUniversityStaff | IsPlatformAdmin]
+    permission_classes = [IsAuthenticated]
     throttle_classes = [MFARateThrottle]
 
     def post(self, request):
@@ -224,7 +224,7 @@ class MFASetupView(APIView):
 
 
 class MFAVerifyView(APIView):
-    permission_classes = [IsAuthenticated, IsUniversityStaff | IsPlatformAdmin]
+    permission_classes = [IsAuthenticated]
     throttle_classes = [MFARateThrottle]
     MAX_ATTEMPTS = 5
     LOCKOUT_MINUTES = 5
@@ -243,8 +243,15 @@ class MFAVerifyView(APIView):
             else:
                 del request.session['mfa_lockout_until']
                 request.session['mfa_remaining_attempts'] = self.MAX_ATTEMPTS
-        device = user.totpdevice_set.first()
-        if device and device.verify_token(code):
+        verified_device = None
+        for device in user.totpdevice_set.all():
+            if device.verify_token(code):
+                verified_device = device
+                break
+                
+        if verified_device:
+            # Clean up any duplicate devices created by race conditions
+            user.totpdevice_set.exclude(pk=verified_device.pk).delete()
             request.session['mfa_verified'] = True
             request.session['mfa_remaining_attempts'] = self.MAX_ATTEMPTS
             return Response({'detail': 'MFA verified successfully'})
@@ -291,13 +298,17 @@ class AuthMeView(APIView):
         user = request.user
         if hasattr(user, 'applicant'):
             return Response({
+                'id': str(user.id),
                 'role': 'applicant',
                 'email': user.email,
                 'full_name': user.full_name,
+                'mfa_enabled': user.totpdevice_set.exists(),
+                'mfa_verified': request.session.get('mfa_verified', False),
             })
         if hasattr(user, 'universitystaff'):
             staff = user.universitystaff
             return Response({
+                'id': str(user.id),
                 'role': 'universitystaff',
                 'email': user.email,
                 'full_name': user.full_name,
@@ -309,6 +320,7 @@ class AuthMeView(APIView):
             })
         if hasattr(user, 'platformadmin'):
             return Response({
+                'id': str(user.id),
                 'role': 'platformadmin',
                 'email': user.email,
                 'full_name': user.full_name,

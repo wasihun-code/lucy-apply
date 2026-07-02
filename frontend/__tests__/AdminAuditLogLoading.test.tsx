@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
-import AdminUsersLoading from '@/app/admin/users/loading'
-import AdminAuditLogLoading from '@/app/admin/audit-log/loading'
+import AdminUsersLoading from '@/app/platform_admin/users/loading'
+import AdminAuditLogLoading from '@/app/platform_admin/audit-log/loading'
 import PortalAuditLogLoading from '@/app/portal/audit-log/loading'
 
 describe('AdminUsersLoading', () => {

@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import AdminStatsLoading from '@/app/admin/stats/loading'
+import AdminStatsLoading from '@/app/platform_admin/stats/loading'
 
 describe('AdminStatsLoading', () => {
   it('renders without crashing', () => {

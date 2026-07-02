@@ -218,6 +218,11 @@ class UniversityViewSet(viewsets.ModelViewSet):
     def staff_remove(self, request, pk=None, staff_id=None):
         university = self.get_object()
         staff = get_object_or_404(UniversityStaff, id=staff_id, university=university)
+        if staff.id == request.user.id:
+            return Response(
+                {'error': {'code': 'CANNOT_REMOVE_SELF', 'message': 'You cannot deactivate your own account'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if staff.account_status == 'deactivated':
             return Response(
                 {'error': {'code': 'ALREADY_DEACTIVATED', 'message': 'Staff member is already deactivated'}},

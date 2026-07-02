@@ -24,14 +24,28 @@ export default function LoginPage() {
     getMe().then((me) => {
       if (!me) return
       if (me.role === 'universitystaff') {
-        if (!me.mfa_enabled) { router.replace('/mfa/setup'); return }
+        if (!me.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') { 
+          localStorage.setItem('mfa_setup_pending', 'true')
+          router.replace('/mfa/setup')
+          return 
+        }
         if (!me.mfa_verified) { router.replace('/mfa/verify?redirect=/portal/applications'); return }
         router.replace('/portal/applications')
       } else if (me.role === 'platformadmin') {
-        if (!me.mfa_enabled) { router.replace('/mfa/setup'); return }
-        if (!me.mfa_verified) { router.replace('/mfa/verify?redirect=/admin/universities'); return }
-        router.replace('/admin/universities')
+        if (!me.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') { 
+          localStorage.setItem('mfa_setup_pending', 'true')
+          router.replace('/mfa/setup')
+          return 
+        }
+        if (!me.mfa_verified) { router.replace('/mfa/verify?redirect=/platform_admin/universities'); return }
+        router.replace('/platform_admin/universities')
       } else {
+        if (!me.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') { 
+          localStorage.setItem('mfa_setup_pending', 'true')
+          router.replace('/mfa/setup')
+          return 
+        }
+        if (!document.cookie.includes('mfa_trusted=true')) { router.replace('/mfa/verify?redirect=/dashboard'); return }
         router.replace('/dashboard')
       }
     })
@@ -61,7 +75,8 @@ export default function LoginPage() {
       }
 
       if (me.role === 'universitystaff') {
-        if (!me.mfa_enabled) {
+        if (!me.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') {
+          localStorage.setItem('mfa_setup_pending', 'true')
           router.push('/mfa/setup')
           return
         }
@@ -73,15 +88,25 @@ export default function LoginPage() {
         return
       }
       if (me.role === 'platformadmin') {
-        if (!me.mfa_enabled) {
+        if (!me.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') {
+          localStorage.setItem('mfa_setup_pending', 'true')
           router.push('/mfa/setup')
           return
         }
         if (!me.mfa_verified) {
-          router.push('/mfa/verify?redirect=/admin/universities')
+          router.push('/mfa/verify?redirect=/platform_admin/universities')
           return
         }
-        router.push('/admin/universities')
+        router.push('/platform_admin/universities')
+        return
+      }
+      if (!me.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') {
+        localStorage.setItem('mfa_setup_pending', 'true')
+        router.push('/mfa/setup')
+        return
+      }
+      if (!document.cookie.includes('mfa_trusted=true')) {
+        router.push('/mfa/verify?redirect=/dashboard')
         return
       }
       router.push('/dashboard')

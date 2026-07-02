@@ -389,7 +389,7 @@ export default function ApplicationDetailPage() {
                   const doc = latestDocsByType[item.type]
                   const { badgeStatus, label: badgeLabel } =
                     getDocDisplayStatus(item)
-                  const canAct = item.uploaded && !item.status
+                  const canAct = item.uploaded && item.status === 'pending'
 
                   return (
                     <div key={item.type}>

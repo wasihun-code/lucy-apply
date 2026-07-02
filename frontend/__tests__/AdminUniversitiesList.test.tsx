@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
-import AdminUniversitiesLoading from '@/app/admin/universities/loading'
-import UniversityDetailLoading from '@/app/admin/universities/[id]/loading'
+import AdminUniversitiesLoading from '@/app/platform_admin/universities/loading'
+import UniversityDetailLoading from '@/app/platform_admin/universities/[id]/loading'
 import { Skeleton } from '@/components/ui/Skeleton'
 
 describe('AdminUniversitiesLoading', () => {

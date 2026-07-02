@@ -248,7 +248,7 @@ export default function AdminStatsPage() {
           Universities
         </h2>
         <Link
-          href="/admin/universities"
+          href="/platform_admin/universities"
           className="text-sm text-primary hover:text-primary-dark font-medium inline-flex items-center gap-1 transition-colors"
         >
           View all
@@ -277,7 +277,7 @@ export default function AdminStatsPage() {
                 <tr
                   key={u.id}
                   className="border-b border-border last:border-0 hover:bg-primary-soft/20 transition-colors cursor-pointer"
-                  onClick={() => router.push(`/admin/universities/${u.id}`)}
+                  onClick={() => router.push(`/platform_admin/universities/${u.id}`)}
                 >
                   <td className="px-4 py-3 text-sm font-medium text-text-900">{u.name}</td>
                   <td className="px-4 py-3">
@@ -300,7 +300,7 @@ export default function AdminStatsPage() {
               Recent Activity
             </h2>
             <Link
-              href="/admin/audit-log"
+              href="/platform_admin/audit-log"
               className="text-sm text-primary hover:text-primary-dark font-medium inline-flex items-center gap-1 transition-colors"
             >
               View all

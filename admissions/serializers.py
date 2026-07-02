@@ -20,6 +20,7 @@ class ApplicationListSerializer(serializers.ModelSerializer):
     program_name = serializers.CharField(source='program.name', read_only=True)
     university_name = serializers.CharField(source='university.name', read_only=True)
     applicant_name = serializers.CharField(source='applicant.full_name', read_only=True)
+    program_is_archived = serializers.SerializerMethodField()
     document_verified_count = serializers.SerializerMethodField()
     document_total_count = serializers.SerializerMethodField()
 
@@ -28,7 +29,7 @@ class ApplicationListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'program', 'program_name', 'university_name',
             'admission_cycle', 'status', 'submitted_at',
-            'applicant', 'applicant_name',
+            'applicant', 'applicant_name', 'program_is_archived',
             'document_verified_count', 'document_total_count',
             'created_at', 'updated_at',
         ]
@@ -42,6 +43,9 @@ class ApplicationListSerializer(serializers.ModelSerializer):
             status='verified',
         ).values('document_type').distinct().count()
 
+    def get_program_is_archived(self, obj):
+        return obj.program.status == 'archived'
+
     def get_document_total_count(self, obj):
         return len(obj.program.required_documents)
 
@@ -50,6 +54,7 @@ class ApplicationDetailSerializer(serializers.ModelSerializer):
     document_checklist = serializers.SerializerMethodField()
     program_name = serializers.CharField(source='program.name', read_only=True)
     university_name = serializers.CharField(source='university.name', read_only=True)
+    program_is_archived = serializers.SerializerMethodField()
     payment = serializers.SerializerMethodField()
 
     class Meta:
@@ -68,6 +73,9 @@ class ApplicationDetailSerializer(serializers.ModelSerializer):
                 'completed_at': payment.completed_at,
             }
         return None
+
+    def get_program_is_archived(self, obj):
+        return obj.program.status == 'archived'
 
     def get_document_checklist(self, obj):
         checklist = []

@@ -94,8 +94,8 @@ export default function ProfilePage() {
       const changed: Record<string, string> = {}
       if (formData.full_name !== profile?.full_name) changed.full_name = formData.full_name
       if (formData.country_of_residence !== profile?.country_of_residence) changed.country_of_residence = formData.country_of_residence
-      if (formData.date_of_birth !== profile?.date_of_birth) changed.date_of_birth = formData.date_of_birth
-      if (formData.nationality !== profile?.nationality) changed.nationality = formData.nationality
+      if (formData.date_of_birth !== (profile?.date_of_birth ?? '')) changed.date_of_birth = formData.date_of_birth
+      if (formData.nationality !== (profile?.nationality ?? '')) changed.nationality = formData.nationality
 
       const res = await fetch('/api/proxy/applicants/me/', {
         method: 'PATCH',
@@ -334,11 +334,6 @@ export default function ProfilePage() {
                 </p>
               </div>
             </div>
-            <Link href="/mfa/setup">
-              <Button variant="ghost" size="sm">
-                Manage 2FA
-              </Button>
-            </Link>
           </div>
         </div>
       </Card>

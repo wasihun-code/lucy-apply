@@ -44,6 +44,7 @@ export default function TeamPage() {
   const [staff, setStaff] = useState<StaffMember[]>([])
   const [universityId, setUniversityId] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -67,6 +68,7 @@ export default function TeamPage() {
     }
     setUniversityId(me.university)
     setIsAdmin(me.permission_level === 'admin')
+    setCurrentUserId(me.id ?? null)
     try {
       const data = await authFetch<StaffMember[]>(`universities/${me.university}/staff/`)
       setStaff(data)
@@ -153,7 +155,7 @@ export default function TeamPage() {
             key: 'actions' as const,
             header: 'Actions',
             render: (s: StaffMember) =>
-              s.account_status === 'active' ? (
+              s.account_status === 'active' && s.id !== currentUserId ? (
                 <Button
                   variant="ghost"
                   size="sm"

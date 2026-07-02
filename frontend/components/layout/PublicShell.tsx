@@ -1,36 +1,57 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 import { getMe, type AuthUser } from '@/lib/auth'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/Button'
 import { ApplicantShell } from '@/components/layout/ApplicantShell'
 import { StaffShell } from '@/components/layout/StaffShell'
+import { Spinner } from '@/components/ui/Spinner'
 
 const AUTH_PATHS = ['/login', '/register', '/forgot-password', '/reset-password', '/verify-email', '/mfa/setup', '/mfa/verify']
+const PROTECTED_PATHS = ['/dashboard', '/portal', '/platform_admin']
 
 export function PublicShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<AuthUser | null>(null)
   const [authReady, setAuthReady] = useState(false)
-  const isAuthPage = AUTH_PATHS.some(p => pathname.startsWith(p))
+  const [mfaReady, setMfaReady] = useState(false)
+  const isAuthPage = useMemo(() => AUTH_PATHS.some(p => pathname.startsWith(p)), [pathname])
+  const isProtected = useMemo(() => PROTECTED_PATHS.some(p => pathname.startsWith(p)), [pathname])
 
   useEffect(() => {
+    setMfaReady(false)
     getMe().then((u) => {
       setUser(u)
       setAuthReady(true)
+      if (u && pathname !== '/' && !isAuthPage) {
+        if (!u.mfa_enabled) {
+          setMfaReady(true)
+          router.replace('/mfa/setup')
+          return
+        }
+        if (!u.mfa_verified && !document.cookie.includes('mfa_trusted=true')) {
+          setMfaReady(true)
+          router.replace('/mfa/verify')
+          return
+        }
+      }
       if (u && pathname === '/') {
-        if (u.role === 'platformadmin') router.replace('/admin/universities')
+        setMfaReady(true)
+        if (u.role === 'platformadmin') router.replace('/platform_admin/universities')
         else if (u.role === 'universitystaff') router.replace('/portal')
         else router.replace('/dashboard')
+        return
       }
+      setMfaReady(true)
     })
-  }, [router, pathname])
+  }, [router, pathname, isAuthPage])
 
-  if (authReady && user && pathname !== '/' && !isAuthPage) {
+  const needsMfa = user && !pathname.startsWith('/mfa') && (!user.mfa_enabled || (!user.mfa_verified && !document.cookie.includes('mfa_trusted=true')))
+
+  if (authReady && mfaReady && user && pathname !== '/' && !isAuthPage && !needsMfa) {
     if (user.role === 'applicant') {
       return <ApplicantShell initialUser={user}>{children}</ApplicantShell>
     }
@@ -79,7 +100,7 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
                   variant="primary"
                   size="sm"
                   onClick={() => {
-                    if (user.role === 'platformadmin') router.push('/admin/universities')
+                    if (user.role === 'platformadmin') router.push('/platform_admin/universities')
                     else if (user.role === 'universitystaff') router.push('/portal')
                     else router.push('/dashboard')
                   }}
@@ -93,7 +114,11 @@ export function PublicShell({ children }: { children: React.ReactNode }) {
       </nav>
 
       <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-        {children}
+        {isProtected && (!authReady || !mfaReady || needsMfa) ? (
+          <div className="flex justify-center py-16">
+            <Spinner />
+          </div>
+        ) : children}
       </main>
 
       <footer className="border-t border-border py-6">

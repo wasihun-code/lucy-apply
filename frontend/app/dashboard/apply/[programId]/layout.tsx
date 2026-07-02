@@ -135,7 +135,7 @@ export default function WizardLayout({ children }: { children: React.ReactNode }
       try {
         const [prog, appsResp] = await Promise.all([
           authFetch<Program>(`programs/${programId}/`),
-          authFetch<PaginatedResponse<Application>>('applicants/me/applications/'),
+          authFetch<PaginatedResponse<Application>>('applications/'),
         ])
         setProgram(prog)
 

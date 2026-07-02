@@ -21,17 +21,32 @@ export function ApplicantShell({ children, initialUser }: { children: React.Reac
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<AuthUser | null>(initialUser ?? null)
+  const [mfaReady, setMfaReady] = useState(!!initialUser)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
 
   useEffect(() => {
-    if (initialUser) return
+    if (initialUser) {
+      setUser(initialUser)
+      setMfaReady(true)
+      return
+    }
     getMe().then((u) => {
       if (!u) {
         router.push('/login')
         return
       }
+      if (!u.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') {
+        localStorage.setItem('mfa_setup_pending', 'true')
+        router.replace('/mfa/setup')
+        return
+      }
+      if (!u.mfa_verified && !document.cookie.includes('mfa_trusted=true')) {
+        router.replace('/mfa/verify')
+        return
+      }
       setUser(u)
+      setMfaReady(true)
     })
   }, [router, initialUser])
 
@@ -44,10 +59,10 @@ export function ApplicantShell({ children, initialUser }: { children: React.Reac
         const apps = data.results || []
         const lastVisited = localStorage.getItem(NOTIFICATIONS_KEY)
         const cutoff = lastVisited ? parseInt(lastVisited, 10) : 0
-        const count = apps.filter((a: { status: string; created_at: string }) => {
+        const count = apps.filter((a: { status: string; updated_at: string }) => {
           if (a.status === 'draft') return false
           if (!cutoff) return true
-          return new Date(a.created_at).getTime() > cutoff
+          return new Date(a.updated_at).getTime() > cutoff
         }).length
         setUnreadCount(count)
       } catch {
@@ -61,7 +76,7 @@ export function ApplicantShell({ children, initialUser }: { children: React.Reac
     setMobileOpen(false)
   }, [pathname])
 
-  if (!user) {
+  if (!user || !mfaReady) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse bg-border rounded h-4 w-32" />

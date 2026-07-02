@@ -71,7 +71,6 @@ describe('ProfilePage', () => {
     render(<ProfilePage />)
     expect(await screen.findByText('Password')).toBeInTheDocument()
     expect(screen.getByText('Two-Factor Authentication')).toBeInTheDocument()
-    expect(screen.getByText('Manage 2FA')).toBeInTheDocument()
     expect(screen.getByText('Change Password')).toBeInTheDocument()
   })
 

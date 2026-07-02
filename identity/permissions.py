@@ -102,3 +102,10 @@ class IsApplicantOwnerOrStaffScoped(BasePermission):
                 return True
             return obj.university_id == request.user.universitystaff.university_id
         return False
+class IsStaffOrPlatformAdmin(BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and (hasattr(request.user, 'universitystaff') or hasattr(request.user, 'platformadmin'))
+        )

@@ -120,7 +120,7 @@ export default function AdminUniversitiesPage() {
       header: 'Name',
       render: (u) => (
         <Link
-          href={`/admin/universities/${u.id}`}
+          href={`/platform_admin/universities/${u.id}`}
           className="text-primary hover:underline font-medium"
           onClick={(e) => e.stopPropagation()}
         >
@@ -178,7 +178,7 @@ export default function AdminUniversitiesPage() {
       <PageHeader
         title="Universities"
         action={
-          <Link href="/admin/universities/new">
+          <Link href="/platform_admin/universities/new">
             <Button variant="primary" size="sm">
               + Onboard University
             </Button>
@@ -216,13 +216,13 @@ export default function AdminUniversitiesPage() {
           icon={<Building2 size={32} className="text-text-400" />}
           heading="No universities"
           description="Onboard your first university partner to get started."
-          action={{ label: '+ Onboard University', href: '/admin/universities/new' }}
+          action={{ label: '+ Onboard University', href: '/platform_admin/universities/new' }}
         />
       ) : (
         <Table<AdminUniversity>
           columns={columns}
           data={filtered}
-          onRowClick={(u) => router.push(`/admin/universities/${u.id}`)}
+          onRowClick={(u) => router.push(`/platform_admin/universities/${u.id}`)}
         />
       )}
 

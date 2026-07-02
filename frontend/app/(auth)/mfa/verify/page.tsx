@@ -19,7 +19,7 @@ async function apiPost(path: string, body: unknown): Promise<Response> {
 }
 
 function computeDefaultRedirect(me: AuthUser): string {
-  if (me.role === 'platformadmin') return '/admin/universities'
+  if (me.role === 'platformadmin') return '/platform_admin/universities'
   if (me.role === 'universitystaff') return '/portal/applications'
   return '/dashboard'
 }
@@ -43,11 +43,8 @@ function MFAVerifyForm() {
       }
       const target = redirectFromUrl || computeDefaultRedirect(me)
       setRedirectTo(target)
-      if (me.role === 'applicant') {
-        router.replace('/dashboard')
-        return
-      }
-      if (!me.mfa_enabled) {
+      if (!me.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') {
+        localStorage.setItem('mfa_setup_pending', 'true')
         router.replace('/mfa/setup')
         return
       }
@@ -64,6 +61,8 @@ function MFAVerifyForm() {
     try {
       const res = await apiPost('auth/mfa/verify/', { code })
       if (res.ok) {
+        document.cookie = 'mfa_trusted=true; path=/; max-age=900'
+        localStorage.removeItem('mfa_setup_pending')
         router.replace(redirectTo)
         return
       }

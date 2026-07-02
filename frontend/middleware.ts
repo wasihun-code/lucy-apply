@@ -15,7 +15,7 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const token = request.cookies.get('access_token')?.value
 
-  if (pathname.startsWith('/dashboard') && !token) {
+  if ((pathname.startsWith('/dashboard') || pathname.startsWith('/mfa')) && !token) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)
@@ -27,19 +27,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  if (pathname.startsWith('/admin') && !token) {
+  if (pathname.startsWith('/platform_admin') && !token) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirect', pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // Role-based check for /admin routes
-  if (pathname.startsWith('/admin') && token) {
-    const payload = decodeJwtPayload(token)
-    if (payload && payload.role !== 'platform_admin') {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
-  }
 
   return NextResponse.next()
 }

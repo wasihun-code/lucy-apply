@@ -12,6 +12,14 @@ export async function POST(request: Request) {
     body: JSON.stringify({ email, password }),
   })
 
+  const contentType = res.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    return NextResponse.json(
+      { detail: 'Service temporarily unavailable. Please try again.' },
+      { status: res.status },
+    )
+  }
+
   const data = await res.json()
 
   if (!res.ok) {
@@ -36,6 +44,11 @@ export async function POST(request: Request) {
     path: '/',
     maxAge: 24 * 60 * 60,
   })
+
+  const setCookies = res.headers.getSetCookie ? res.headers.getSetCookie() : []
+  for (const cookie of setCookies) {
+    response.headers.append('Set-Cookie', cookie)
+  }
 
   return response
 }

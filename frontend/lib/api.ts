@@ -7,6 +7,7 @@ export async function fetchAPI<T>(path: string, options?: RequestInit): Promise<
   const url = `${API_URL.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
   const res = await fetch(url, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
+    cache: 'no-store',
     ...options,
   })
   if (!res.ok) {
@@ -38,6 +39,13 @@ function extractErrorMessage(json: unknown): string | null {
     const errObj = error as Record<string, unknown>
     if (typeof errObj.message === 'string') return errObj.message
     if (typeof errObj.code === 'string') return errObj.code
+  }
+  // DRF field-level errors: pick the first message from the first field
+  for (const key of Object.keys(obj)) {
+    const val = obj[key]
+    if (Array.isArray(val) && val.length > 0 && typeof val[0] === 'string') {
+      return val[0]
+    }
   }
   return null
 }
@@ -147,6 +155,7 @@ export interface Application {
   program: string
   program_name: string
   university_name: string
+  program_is_archived?: boolean
   admission_cycle: string
   status: string
   form_data: Record<string, unknown>

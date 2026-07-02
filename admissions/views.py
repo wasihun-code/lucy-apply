@@ -323,6 +323,12 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if application.program.status == 'archived':
+            return Response(
+                {'error': {'code': 'PROGRAM_ARCHIVED', 'message': 'Cannot submit applications for an archived program'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         cycle = application.admission_cycle
         if cycle.status != 'open':
             return Response(
@@ -393,14 +399,20 @@ class ApplicationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if application.program.status == 'archived':
+            return Response(
+                {'error': {'code': 'PROGRAM_ARCHIVED', 'message': 'Cannot review applications for an archived program'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         is_reversal = (
             new_status == 'under_review'
             and application.status in ('admitted', 'rejected', 'waitlisted')
         )
 
-        if new_status == 'under_review' and not is_reversal:
+        if new_status == 'under_review' and not is_reversal and application.status != 'submitted':
             return Response(
-                {'error': {'code': 'NOT_REVERSAL', 'message': 'under_review can only be set as a reversal from a decision state'}},
+                {'error': {'code': 'INVALID_TRANSITION', 'message': 'under_review can only be set from submitted or as a reversal'}},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

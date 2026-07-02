@@ -41,7 +41,9 @@ export default function MFASetupPage() {
   const [user, setUser] = useState<AuthUser | null>(null)
 
   function mfaRedirect(me: AuthUser) {
-    return me.role === 'platformadmin' ? '/admin/universities' : '/portal/applications'
+    if (me.role === 'platformadmin') return '/platform_admin/universities'
+    if (me.role === 'universitystaff') return '/portal/applications'
+    return '/dashboard'
   }
 
   useEffect(() => {
@@ -51,18 +53,16 @@ export default function MFASetupPage() {
         return
       }
       setUser(me)
-      if (me.role === 'applicant') {
-        router.replace('/dashboard')
-        return
-      }
       if (me.mfa_enabled && me.mfa_verified) {
+        localStorage.removeItem('mfa_setup_pending')
         router.replace(mfaRedirect(me))
         return
       }
+      localStorage.setItem('mfa_setup_pending', 'true')
       apiPost('auth/mfa/setup/', {}).then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => null)
-          setError(body?.error?.message || body?.detail || 'Failed to set up MFA')
+          setError(body?.error?.message || body?.detail || 'Failed to set up MFA'); setProvisioningUri(null)
           return
         }
         const data = await res.json()
@@ -82,7 +82,9 @@ export default function MFASetupPage() {
     try {
       const res = await apiPost('auth/mfa/verify/', { code })
       if (res.ok) {
-        router.replace(user ? mfaRedirect(user) : '/portal/applications')
+        document.cookie = 'mfa_trusted=true; path=/; max-age=900'
+        localStorage.removeItem('mfa_setup_pending')
+        router.replace(user ? mfaRedirect(user) : '/dashboard')
         return
       }
       const body = await res.json().catch(() => null)

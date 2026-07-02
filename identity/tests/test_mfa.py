@@ -55,7 +55,7 @@ class TestMFASetupView:
         assert 'provisioning_uri' in response.data
         assert staff_user.totpdevice_set.count() == 1
 
-    def test_applicant_denied(self):
+    def test_applicant_allowed(self):
         applicant = Applicant.objects.create_user(
             email='app@test.com', full_name='App',
             password='pass123', country_of_residence='ET',
@@ -64,7 +64,8 @@ class TestMFASetupView:
         token = get_token_for_user(applicant)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         response = client.post('/api/v1/auth/mfa/setup/', format='json')
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
+        assert 'provisioning_uri' in response.data
 
 
 @pytest.mark.django_db
@@ -114,7 +115,7 @@ class TestMFAVerifyView:
             assert response.status_code == status.HTTP_400_BAD_REQUEST
             assert 'remaining_attempts' in response.data
 
-    def test_applicant_denied(self):
+    def test_applicant_allowed(self):
         applicant = Applicant.objects.create_user(
             email='app@test.com', full_name='App',
             password='pass123', country_of_residence='ET',
@@ -123,7 +124,7 @@ class TestMFAVerifyView:
         token = get_token_for_user(applicant)
         client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         response = client.post('/api/v1/auth/mfa/verify/', {'code': '123456'}, format='json')
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
 
 @pytest.mark.django_db

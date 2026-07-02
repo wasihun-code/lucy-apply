@@ -139,7 +139,11 @@ export default function DashboardPage() {
       ) : (
         <div className="space-y-3">
           {applications.map((app) => (
-            <ApplicationCard key={app.id} application={app} />
+            <ApplicationCard
+              key={app.id}
+              application={app}
+              onDeleted={(id) => setApplications((prev) => prev.filter((a) => a.id !== id))}
+            />
           ))}
         </div>
       )}

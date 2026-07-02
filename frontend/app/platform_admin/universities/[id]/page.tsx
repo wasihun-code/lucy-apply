@@ -121,11 +121,11 @@ export default function UniversityDetailPage() {
       <PageHeader
         title={university.name}
         breadcrumb={[
-          { label: 'Universities', href: '/admin/universities' },
-          { label: university.name, href: `/admin/universities/${university.id}` },
+          { label: 'Universities', href: '/platform_admin/universities' },
+          { label: university.name, href: `/platform_admin/universities/${university.id}` },
         ]}
         action={
-          <Link href={`/admin/universities/${university.id}/edit`}>
+          <Link href={`/platform_admin/universities/${university.id}/edit`}>
             <Button variant="secondary" size="sm">
               Edit
             </Button>
@@ -195,7 +195,7 @@ export default function UniversityDetailPage() {
                 Activate University
               </Button>
             )}
-            <Link href={`/admin/universities`}>
+            <Link href={`/platform_admin/universities`}>
               <Button variant="secondary" className="w-full">
                 View All Universities
               </Button>

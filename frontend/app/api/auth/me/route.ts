@@ -17,13 +17,25 @@ export async function GET(request: NextRequest) {
 
   let res
   try {
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+    const cookieHeader = request.headers.get('Cookie')
+    if (cookieHeader) headers['Cookie'] = cookieHeader
+
     res = await fetch(`${API_URL.replace(/\/$/, '')}/auth/me/`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers,
     })
   } catch (e) {
     return NextResponse.json(
       { error: { code: '502', message: `Backend unreachable: ${(e as Error).message}` } },
       { status: 502 },
+    )
+  }
+
+  const contentType = res.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    return NextResponse.json(
+      { detail: 'Service temporarily unavailable. Please try again.' },
+      { status: res.status },
     )
   }
 

@@ -93,6 +93,12 @@ class AdminUserStatusView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        if user.id == request.user.id:
+            return Response(
+                {'error': {'code': '400', 'message': 'You cannot deactivate your own account'}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         new_status = request.data.get('account_status', '').strip()
         if new_status not in ('active', 'deactivated'):
             return Response(

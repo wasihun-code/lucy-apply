@@ -18,6 +18,9 @@ async function proxy(request: NextRequest, { params }: { params: { path: string[
   }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
+  const cookieHeader = request.headers.get('Cookie')
+  if (cookieHeader) headers['Cookie'] = cookieHeader
+
   let body: string | undefined
   if (['POST', 'PUT', 'PATCH'].includes(method)) {
     body = await request.text()
@@ -25,12 +28,32 @@ async function proxy(request: NextRequest, { params }: { params: { path: string[
 
   const res = await fetch(url.toString(), { method, headers, body })
 
-  const data = await res.text()
-  try {
-    return NextResponse.json(JSON.parse(data), { status: res.status })
-  } catch {
-    return new NextResponse(data, { status: res.status })
+  if (res.status === 204) {
+    const response = new NextResponse(null, { status: 204 })
+    const setCookies = res.headers.getSetCookie ? res.headers.getSetCookie() : []
+    for (const cookie of setCookies) {
+      response.headers.append('Set-Cookie', cookie)
+    }
+    return response
   }
+
+  const contentType = res.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    return NextResponse.json(
+      { detail: 'Service temporarily unavailable. Please try again.' },
+      { status: res.status },
+    )
+  }
+
+  const data = await res.json()
+  const response = NextResponse.json(data, { status: res.status })
+  
+  const setCookies = res.headers.getSetCookie ? res.headers.getSetCookie() : []
+  for (const cookie of setCookies) {
+    response.headers.append('Set-Cookie', cookie)
+  }
+  
+  return response
 }
 
 export const GET = (request: NextRequest, context: { params: { path: string[] } }) => proxy(request, context, 'GET')

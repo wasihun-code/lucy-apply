@@ -90,15 +90,15 @@ export default function NewUniversityPage() {
       <PageHeader
         title="Onboard University"
         breadcrumb={[
-          { label: 'Universities', href: '/admin/universities' },
-          { label: 'New', href: '/admin/universities/new' },
+          { label: 'Universities', href: '/platform_admin/universities' },
+          { label: 'New', href: '/platform_admin/universities/new' },
         ]}
       />
 
       {success && (
         <Alert variant="success" className="mb-6">
           <p>{success}</p>
-          <Link href="/admin/universities" className="mt-3 inline-block">
+          <Link href="/platform_admin/universities" className="mt-3 inline-block">
             <Button variant="primary" size="sm">
               View Universities
             </Button>
@@ -190,7 +190,7 @@ export default function NewUniversityPage() {
               <Button variant="primary" type="submit" loading={saving}>
                 Create University & Send Invitation
               </Button>
-              <Link href="/admin/universities">
+              <Link href="/platform_admin/universities">
                 <Button variant="secondary" type="button">
                   Cancel
                 </Button>

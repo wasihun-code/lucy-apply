@@ -7,19 +7,7 @@ import { FormField } from '@/components/ui/FormField'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { Alert } from '@/components/ui/Alert'
-import { fetchAPI } from '@/lib/api'
-
-function getErrorMessage(e: unknown): string {
-  if (e instanceof Error) {
-    try {
-      const body = JSON.parse(e.message)
-      return body?.error?.message || body?.detail || body?.message || 'Registration failed'
-    } catch {
-      return e.message
-    }
-  }
-  return 'Registration failed'
-}
+import { fetchAPI, getErrorMessage } from '@/lib/api'
 
 export default function RegisterPage() {
   const [fullName, setFullName] = useState('')

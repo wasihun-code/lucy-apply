@@ -15,10 +15,10 @@ type NavItem = {
 }
 
 const platformAdminNav: NavItem[] = [
-  { href: '/admin/universities', label: 'Universities', roles: ['platformadmin'] },
-  { href: '/admin/users', label: 'Users', roles: ['platformadmin'] },
-  { href: '/admin/stats', label: 'Stats', roles: ['platformadmin'] },
-  { href: '/admin/audit-log', label: 'Audit Log', roles: ['platformadmin'] },
+  { href: '/platform_admin/universities', label: 'Universities', roles: ['platformadmin'] },
+  { href: '/platform_admin/users', label: 'Users', roles: ['platformadmin'] },
+  { href: '/platform_admin/stats', label: 'Stats', roles: ['platformadmin'] },
+  { href: '/platform_admin/audit-log', label: 'Audit Log', roles: ['platformadmin'] },
 ]
 
 const staffNav: NavItem[] = [
@@ -41,16 +41,14 @@ export function StaffShell({ children, initialUser }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<AuthUser | null>(initialUser ?? null)
+  const [mfaReady, setMfaReady] = useState(!!initialUser)
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
   useEffect(() => {
     if (initialUser) {
-      // MFA check still runs even when user is provided
-      if (initialUser.mfa_enabled && !initialUser.mfa_verified) {
-        const redirect = encodeURIComponent(pathname)
-        router.push(`/mfa/verify?redirect=${redirect}`)
-      }
+      setUser(initialUser)
+      setMfaReady(true)
       return
     }
     getMe().then((u) => {
@@ -62,20 +60,26 @@ export function StaffShell({ children, initialUser }: { children: React.ReactNod
         router.push('/dashboard')
         return
       }
-      if (u.mfa_enabled && !u.mfa_verified) {
+      if (!u.mfa_enabled || localStorage.getItem('mfa_setup_pending') === 'true') {
+        localStorage.setItem('mfa_setup_pending', 'true')
+        router.replace('/mfa/setup')
+        return
+      }
+      if (!u.mfa_verified && !document.cookie.includes('mfa_trusted=true')) {
         const redirect = encodeURIComponent(pathname)
-        router.push(`/mfa/verify?redirect=${redirect}`)
+        router.replace(`/mfa/verify?redirect=${redirect}`)
         return
       }
       setUser(u)
+      setMfaReady(true)
     })
-  }, [router, pathname, initialUser])
+  }, [router, initialUser])
 
   useEffect(() => {
     setMobileOpen(false)
   }, [pathname])
 
-  if (!user) {
+  if (!user || !mfaReady) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-pulse bg-border rounded h-4 w-32" />

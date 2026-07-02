@@ -65,7 +65,7 @@ class TestDecisionReversal:
         app.refresh_from_db()
         assert app.status == 'admitted'
 
-    def test_non_reversal_under_review_blocked(self, officer_client, application):
+    def test_submitted_to_under_review_allowed(self, officer_client, application):
         app = application
         app.status = 'submitted'
         app.submitted_at = timezone.now()
@@ -76,8 +76,7 @@ class TestDecisionReversal:
             {'status': 'under_review', 'reason': 'Start review'},
             format='json',
         )
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert 'reversal from a decision state' in response.data['error']['message'].lower()
+        assert response.status_code == status.HTTP_200_OK
 
     def test_reversal_triggers_email(self, officer_client, admitted_application):
         app = admitted_application
